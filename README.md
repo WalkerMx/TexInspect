@@ -1,14 +1,15 @@
 # TexInspect DDS Encoder/Decoder (VB.NET)
 A lightweight, fully managed DDS encoder and decoder. TexInspect is a zero-dependency application for handling 2D DirectDraw Surface textures.
 
-![](https://github.com/WalkerMx/DemoImages/blob/a8fe98088a92fdc64ec67970ae81a62eba3d4399/TexInspect/TexInspectCapture.PNG)
+![](https://github.com/WalkerMx/DemoImages/blob/032c8a250d69e3aefb59c09a61cd6d7de76c1e6f/TexInspect/v1.3.1.PNG)
 
 ## Features
-* **Tiny Footprint:** Under 100KB, portable even if you use floppy disks.
+* **Tiny Footprint:** Under 128KB, portable even if you use floppy disks.
 * **Compatibility:** Only requires .NET 4.7.2, no extra runtimes or redistributables.  Compatible with Windows 7 SP1 - 11.
 * **Full LDR Support:** Supports encoding and decoding BC1-5, Legacy DXT1-5, DXT5n, ATI1, ATI2, and BC7.
 * **MipMaps:** Automated chain generation using Catmull-Rom downsampling.
 * **CubeMaps:** Automated decoding and saving of CubeMap arrays.
+* **Normal Maps:** Specialized alternative encoders for Normal Maps using DXT5n or BC7n.
 * **Quality Analysis:** Supports assessing MSE, PSNR, and SSIM.
 * **Headers:** Supports Legacy FourCC and modern DX10 (DXGI_Format) extended headers.
 * **Reporting:** Capable of reading and validating DDS headers, and generating full reports.
@@ -35,40 +36,40 @@ Comparison testing was done on a i9-9980HK (2019), strictly on the CPU.  Results
 ### Encoding
 | | TexInspect 4K | TexConv 4K | Delta |
 | :--- | :--- | :--- | :--- |
-| BC7 No Mips | 272.86ms | 23226.3ms | 85.1x Faster |
-| BC7 Full Mips | 402.3ms | 32747.8ms | 81.4x Faster |
-| BC5 No Mips | 233.56ms | 215.8ms | 1.08x Slower |
-| BC5 Full Mips | 345.28ms | 513.9ms | 1.5x Faster |
-| BC3 No Mips | 238.5ms | 428.0ms | 1.8x Faster |
-| BC3 Full Mips | 349.2ms | 790.5ms | 2.3x Faster |
-| BC1 No Mips | 226.26ms | 409.6ms | 1.8x Faster |
-| BC1 Full Mips | 305.74ms | 766.7ms | 2.5x Faster |
+| BC7 No Mips | 246.78ms | 23226.3ms | 94.1x Faster |
+| BC7 Full Mips | 369.34ms | 32747.8ms | 88.7x Faster |
+| BC5 No Mips | 198.3ms | 215.8ms | 1.1x Faster |
+| BC5 Full Mips | 302.08ms | 513.9ms | 1.7x Faster |
+| BC3 No Mips | 208.92ms | 428.0ms | 2.0x Faster |
+| BC3 Full Mips | 311.14ms | 790.5ms | 2.5x Faster |
+| BC1 No Mips | 187.38ms | 409.6ms | 2.2x Faster |
+| BC1 Full Mips | 262.58ms | 766.7ms | 2.9x Faster |
 
 ### Decoding
 | | TexInspect 4K | TexConv 4K | Delta |
 | :--- | :--- | :--- | :--- |
-| BC7 | 66.28ms | 1600.1ms | 24.1x Faster |
-| BC5 | 51.88ms | 423.3ms | 8.2x Faster |
-| BC3 | 56.76ms | 1380.4ms | 24.3x Faster |
-| BC1 | 40.02ms | 1354.0ms | 33.8x Faster |
+| BC7 | 63.74ms | 1600.1ms | 25.1x Faster |
+| BC5 | 54.36ms | 423.3ms | 7.8x Faster |
+| BC3 | 49.9ms | 1380.4ms | 27.7x Faster |
+| BC1 | 35.26ms | 1354.0ms | 38.4x Faster |
 
 ## Quality
 Kodak Lossless TrueColor Image Suite Benchmarks (24 Images)
 | MSE | TexConv BC7 | TexInspect BC7 | TexConv BC3 | TexInspect BC3 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Average** | 4.6653 | 4.4707 | 21.1078 | 31.0008 |
-| **Worst-Case** | 10.1183 | 9.0946 | 47.2959 | 71.734 |
+| **Average** | 4.6653 | 4.2614 | 21.1078 | 31.0008 |
+| **Worst-Case** | 10.1183 | 8.7888 | 47.2959 | 71.734 |
 > MSE Reference: 0 = Lossless | <2 = Indistinguishable | <20 = Excellent | <65 = Acceptable
 
 | PSNR | TexConv BC7 | TexInspect BC7 | TexConv BC3 | TexInspect BC3 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Average** | 41.9745 dB | 42.0644 dB | 35.3033 dB | 33.7313 dB |
-| **Worst-Case** | 38.0797 dB | 38.543 dB | 31.3826 dB | 29.5736 dB |
+| **Average** | 41.9745 dB | 42.3055 dB | 35.3033 dB | 33.7313 dB |
+| **Worst-Case** | 38.0797 dB | 38.6915 dB | 31.3826 dB | 29.5736 dB |
 > PSNR Reference: 128 = Lossless | >45 dB = Indistinguishable | >35 dB = Excellent | >30 dB = Acceptable
 
 | SSIM | TexConv BC7 | TexInspect BC7 | TexConv BC3 | TexInspect BC3 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Average** | 0.9909 | 0.9903 | 0.9608 | 0.9580 |
+| **Average** | 0.9909 | 0.9908 | 0.9608 | 0.9580 |
 | **Worst-Case** | 0.9862 | 0.9830 | 0.9476 | 0.9398 |
 > SSIM Reference: 1.0 = Lossless | >0.98 = Indistinguishable | >0.95 = Excellent | >0.90 = Acceptable
 
@@ -120,6 +121,6 @@ End Using
 ### Decoding
 ```vbnet
 Using Decoder As New DDS_Decoder("input.dds")
-    Decoder.Save("output.png", Imaging.ImageFormat.Png)
+    Decoder.Save("output.png", ".png")
 End Using
 ```
