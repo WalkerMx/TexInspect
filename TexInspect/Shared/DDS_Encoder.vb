@@ -399,19 +399,19 @@ Public Class DDS_Encoder
                                                       Dim currentBlockOffset As Integer = rowOutputOffset + (xBlock * BytesPerBlock)
                                                       Select Case CompressionMode
                                                           Case 0 ' BC1
-                                                              EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset, BufferA)
+                                                              EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF)
                                                           Case 1 ' BC1a
                                                               Dim AlphaMask As UShort = 0
-                                                              EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset, BufferA, AlphaMask)
+                                                              EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset + 8, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF, AlphaMask)
                                                               If HasAlpha AndAlso AlphaMask > 0 Then
                                                                   EncodeBlockBC1a(Result, currentBlockOffset, BufferA, AlphaMask)
                                                               End If
                                                           Case 2 ' BC2
                                                               EncodeBlockBC2(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset)
-                                                              EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset + 8, BufferA)
+                                                              EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset + 8, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF)
                                                           Case 3 ' BC3
                                                               EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 3, Result, currentBlockOffset, BufferA)
-                                                              EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset + 8, BufferB)
+                                                              EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset + 8, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF)
                                                           Case 4 ' BC4
                                                               EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 2, Result, currentBlockOffset, BufferA)
                                                           Case 5 ' BC5
@@ -811,15 +811,11 @@ Public Class DDS_Encoder
         Result(OutputOffset + 7) = CByte((ColorTable >> 24) And &HFF)
     End Sub
 
-    Private Sub EncodeBlockBC1(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, Result As Byte(), OutputOffset As Integer, PixelArray() As Integer, Optional ByRef AlphaMask As UShort = 0)
+    Private Sub EncodeBlockBC1(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, Result As Byte(), OutputOffset As Integer, LocalB() As Integer, LocalG() As Integer, LocalR() As Integer, LocalA() As Integer, Endpoints() As Integer, Indicies() As Integer, Optional ByRef AlphaMask As UShort = 0)
         Dim MaxY As Integer = Height - 1
         Dim MaxX As Integer = Width - 1
-        Dim MaxLum As Integer = -1
-        Dim MinLum As Integer = 1000000
-        Dim Col0 As UShort = 0
-        Dim Col1 As UShort = 0
-        AlphaMask = 0
         Dim idx As Integer = 0
+        AlphaMask = 0
         For j As Integer = 0 To 3
             Dim py As Integer = yPixelBase + j
             If py > MaxY Then py = MaxY
@@ -832,24 +828,26 @@ Public Class DDS_Encoder
                 Dim g As Integer = SourceData(pixelIdx + 1)
                 Dim r As Integer = SourceData(pixelIdx + 2)
                 Dim a As Integer = SourceData(pixelIdx + 3)
-                Dim Lum As Integer = 0
                 If a < 128 Then
                     AlphaMask = AlphaMask Or CUShort(1 << idx)
-                Else
-                    Lum = (r * 77) + (g * 151) + (b * 28)
                 End If
-                PixelArray(idx) = (r << 16) Or (g << 8) Or b
+                LocalB(idx) = b
+                LocalG(idx) = g
+                LocalR(idx) = r
+                LocalA(idx) = a
                 idx += 1
-                If Lum > MaxLum Then
-                    MaxLum = Lum
-                    Col0 = CUShort(((r And &HF8) << 8) Or ((g And &HFC) << 3) Or (b >> 3))
-                End If
-                If Lum < MinLum Then
-                    MinLum = Lum
-                    Col1 = CUShort(((r And &HF8) << 8) Or ((g And &HFC) << 3) Or (b >> 3))
-                End If
             Next
         Next
+        Dim dummyPBits As Integer = 0
+        GetEndpointsPCA(0, 0, LocalR, LocalG, LocalB, LocalA, 0, 3, 0, Endpoints, 0, Indicies, dummyPBits)
+        Dim ep0R As Integer = Endpoints(0)
+        Dim ep1R As Integer = Endpoints(1)
+        Dim ep0G As Integer = Endpoints(2)
+        Dim ep1G As Integer = Endpoints(3)
+        Dim ep0B As Integer = Endpoints(4)
+        Dim ep1B As Integer = Endpoints(5)
+        Dim Col0 As UShort = CUShort(((ep0R And &HF8) << 8) Or ((ep0G And &HFC) << 3) Or (ep0B >> 3))
+        Dim Col1 As UShort = CUShort(((ep1R And &HF8) << 8) Or ((ep1G And &HFC) << 3) Or (ep1B >> 3))
         If Col0 < Col1 Then
             Dim temp As UShort = Col0 : Col0 = Col1 : Col1 = temp
         ElseIf Col0 = Col1 Then
@@ -866,10 +864,9 @@ Public Class DDS_Encoder
         Dim ColorTable As UInteger = 0
         Dim shift As Integer = 0
         For i As Integer = 0 To 15
-            Dim OrigPix As Integer = PixelArray(i)
-            Dim PixR As Integer = (OrigPix >> 16) And &HFF
-            Dim PixG As Integer = (OrigPix >> 8) And &HFF
-            Dim PixB As Integer = OrigPix And &HFF
+            Dim PixR As Integer = LocalR(i)
+            Dim PixG As Integer = LocalG(i)
+            Dim PixB As Integer = LocalB(i)
             Dim dR As Integer = PixR - R0 : Dim dG As Integer = PixG - G0 : Dim dB As Integer = PixB - B0
             Dim minErr As Integer = (dR * dR * 3) + (dG * dG * 4) + (dB * dB * 2)
             Dim Index As UInteger = 0
