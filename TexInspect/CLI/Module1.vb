@@ -1,9 +1,10 @@
 ﻿Imports System.IO
 Imports System.Text
-Imports System.Windows.Media
-Imports System.Windows.Media.Imaging
 
 Public Module Module1
+
+    Private BenchTimer As Stopwatch
+    Private BenchCounter As Integer
 
     Private Class CliOptions
         Public InputPath As String = ""
@@ -20,6 +21,7 @@ Public Module Module1
         Public ReferencePath As String = ""
         Public Verbose As Boolean = False
         Public IsCube As Boolean = False
+        Public BenchEnabled As Boolean
     End Class
 
     Private ReadOnly ImgExts As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase) From {".png", ".jpg", ".jpeg", ".bmp"}
@@ -45,7 +47,12 @@ Public Module Module1
         End If
         Try
             Dim CliOpts As CliOptions = ParseArguments(args)
+            If CliOpts.BenchEnabled Then BenchTimer = Stopwatch.StartNew
             ExecuteCommand(CliOpts)
+            If CliOpts.BenchEnabled Then
+                BenchTimer.Stop()
+                Console.WriteLine($"{vbCrLf}Execution Time: {BenchTimer.ElapsedMilliseconds / 1000} seconds")
+            End If
         Catch ex As Exception
             Console.WriteLine($"[CRITICAL ERROR] {ex.Message}")
         End Try
@@ -89,6 +96,8 @@ Public Module Module1
                     End If
                 Case "-inf", "--info"
                     Opts.ShowInfo = True
+                Case "-t", "--timing"
+                    Opts.BenchEnabled = True
                 Case "-q", "--quality"
                     If i + 1 < args.Length Then
                         Opts.ReferencePath = args(i + 1)

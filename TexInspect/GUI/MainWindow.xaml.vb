@@ -250,7 +250,7 @@ Partial Public Class MainWindow
         Await RunBenchmarkAsync(Sub(FileName)
                                     Dim targetFormat As DXGI_Format = GetFormatFromString(TempFmt)
                                     Using Encoder As New DDS_Encoder(FileName, targetFormat, TempMips, Not TempDX10, SpecialFlags)
-                                        Encoder.BeginEncode()
+                                        Encoder.Save(Path.Combine(TempPath, "encoded.dds"))
                                     End Using
                                 End Sub)
         ToggleBusyState(False)
@@ -260,13 +260,15 @@ Partial Public Class MainWindow
         ToggleBusyState(True)
         Await RunBenchmarkAsync(Sub(FileName)
                                     Using Decoder As New DDS_Decoder(FileName)
-                                        Decoder.BeginDecode()
+                                        Decoder.Save(Path.Combine(TempPath, "decoded.bmp"), ".bmp")
                                     End Using
                                 End Sub)
         ToggleBusyState(False)
     End Sub
 
     Private Async Function RunBenchmarkAsync(BenchAction As Action(Of String)) As Task
+        TempPath = Path.Combine(Path.GetTempPath(), "TexTemp\")
+        Directory.CreateDirectory(TempPath)
         Dim BenchTimer As Stopwatch = Stopwatch.StartNew()
         Await Task.Run(Sub()
                            For i = 0 To 49
