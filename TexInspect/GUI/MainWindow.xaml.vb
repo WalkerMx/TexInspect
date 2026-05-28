@@ -408,7 +408,7 @@ Partial Public Class MainWindow
         If NormalCheckBox.IsChecked = True Then
             If CompressionCheckBox.IsChecked = True Then
                 OverrideComboBox.Items.Add(If(IsDX10, "BC5 UNORM", "ATI2 (BC5)"))
-                If IsDX10 Then OverrideComboBox.Items.Add("BC7n sRGB")
+                If IsDX10 Then OverrideComboBox.Items.Add("BC7n UNORM")
                 OverrideComboBox.Items.Add(If(IsDX10, "BC3n sRGB", "DXT5n"))
             Else
                 OverrideComboBox.Items.Add("BGRX (B8G8R8X8)")
@@ -449,7 +449,7 @@ Partial Public Class MainWindow
             Case "BC4 UNORM", "ATI1 (BC4)" : Return DXGI_Format.DXGI_FORMAT_BC4_UNORM
             Case "BC5 UNORM", "ATI2 (BC5)" : Return DXGI_Format.DXGI_FORMAT_BC5_UNORM
             Case "BC7 sRGB" : Return DXGI_Format.DXGI_FORMAT_BC7_UNORM_SRGB
-            Case "BC7n sRGB" : SpecialFlags = DDS_SpecialFlags.DDS_BC7n : Return DXGI_Format.DXGI_FORMAT_BC7_UNORM_SRGB
+            Case "BC7n UNORM" : SpecialFlags = DDS_SpecialFlags.DDS_BC7n : Return DXGI_Format.DXGI_FORMAT_BC7_UNORM
             Case "BGRX (B8G8R8X8)" : Return DXGI_Format.DXGI_FORMAT_B8G8R8X8_UNORM_SRGB
             Case "BGRA (B8G8R8A8)" : Return DXGI_Format.DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
             Case Else : Throw New Exception($"Unsupported format: {FormatName}")

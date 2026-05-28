@@ -494,92 +494,130 @@ Public Class DDS_Encoder
 
     Private Sub EncodeBlockBC7(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, Result As Byte(), OutputOffset As Integer, LocalB() As Integer, LocalG() As Integer, LocalR() As Integer, LocalA() As Integer, Endpoints() As Integer, Indicies() As Integer)
         Dim LocalIndex As Integer = 0
-        Dim minB As Integer = 255, maxB As Integer = 0
-        Dim minG As Integer = 255, maxG As Integer = 0
-        Dim minR As Integer = 255, maxR As Integer = 0
-        Dim minA As Integer = 255, maxA As Integer = 0
+        Dim MinA As Integer = 255, MaxA As Integer = 0
+        Dim SumB As Integer = 0, SumSquareB As Integer = 0
+        Dim SumG As Integer = 0, SumSquareG As Integer = 0
+        Dim SumR As Integer = 0, SumSquareR As Integer = 0
+        Dim MinLumIndex As Integer = 0, MaxLumIndex As Integer = 0
+        Dim MinLum As Integer = 1000, MaxLum As Integer = -1
         Dim WidthBound As Integer = Width - 1
         Dim HeightBound As Integer = Height - 1
-        Dim stride As Integer = Width * 4
+        Dim Stride As Integer = Width * 4
         For j As Integer = 0 To 3
             Dim yPixel As Integer = yPixelBase + j
             If yPixel > HeightBound Then yPixel = HeightBound
-            Dim RowInputOffset As Integer = yPixel * stride
+            Dim RowInputOffset As Integer = yPixel * Stride
             For i As Integer = 0 To 3
                 Dim xPixel As Integer = xPixelBase + i
                 If xPixel > WidthBound Then xPixel = WidthBound
                 Dim PixelIndex As Integer = RowInputOffset + (xPixel << 2)
-                Dim valB As Integer = SourceData(PixelIndex)
-                Dim valG As Integer = SourceData(PixelIndex + 1)
-                Dim valR As Integer = SourceData(PixelIndex + 2)
-                Dim valA As Integer = SourceData(PixelIndex + 3)
-                LocalB(LocalIndex) = valB
-                LocalG(LocalIndex) = valG
-                LocalR(LocalIndex) = valR
-                LocalA(LocalIndex) = valA
-                If valB < minB Then minB = valB
-                If valB > maxB Then maxB = valB
-                If valG < minG Then minG = valG
-                If valG > maxG Then maxG = valG
-                If valR < minR Then minR = valR
-                If valR > maxR Then maxR = valR
-                If valA < minA Then minA = valA
-                If valA > maxA Then maxA = valA
+                Dim ValB As Integer = SourceData(PixelIndex)
+                Dim ValG As Integer = SourceData(PixelIndex + 1)
+                Dim ValR As Integer = SourceData(PixelIndex + 2)
+                Dim ValA As Integer = SourceData(PixelIndex + 3)
+                LocalB(LocalIndex) = ValB
+                LocalG(LocalIndex) = ValG
+                LocalR(LocalIndex) = ValR
+                LocalA(LocalIndex) = ValA
+                SumB += ValB : SumSquareB += (ValB * ValB)
+                SumG += ValG : SumSquareG += (ValG * ValG)
+                SumR += ValR : SumSquareR += (ValR * ValR)
+                If ValA < MinA Then MinA = ValA
+                If ValA > MaxA Then MaxA = ValA
+                Dim Lum As Integer = ValR + ValG + ValB
+                If Lum < MinLum Then
+                    MinLum = Lum
+                    MinLumIndex = LocalIndex
+                End If
+                If Lum > MaxLum Then
+                    MaxLum = Lum
+                    MaxLumIndex = LocalIndex
+                End If
                 LocalIndex += 1
             Next
         Next
-        If maxA = 0 Then
+        If MaxA = 0 Then
             Result(OutputOffset) = &H40
             Return
         End If
+        Dim VarR As Integer = (SumSquareR << 4) - (SumR * SumR)
+        Dim VarG As Integer = (SumSquareG << 4) - (SumG * SumG)
+        Dim VarB As Integer = (SumSquareB << 4) - (SumB * SumB)
+        Dim MaxVar As Integer = VarR
+        If VarG > MaxVar Then MaxVar = VarG
+        If VarB > MaxVar Then MaxVar = VarB
+        Dim VarThreshold As Integer = 38400
+        Dim UseMode1_7 As Boolean = False
         Dim PBits As Integer = 0
-        If (maxR - minR >= 48) OrElse (maxG - minG >= 48) OrElse (maxB - minB >= 48) Then
-            Dim MaxDist As Integer = 0
+        If MaxVar >= VarThreshold Then
+            Dim VectR As Integer = LocalR(MaxLumIndex) - LocalR(MinLumIndex)
+            Dim VectG As Integer = LocalG(MaxLumIndex) - LocalG(MinLumIndex)
+            Dim VectB As Integer = LocalB(MaxLumIndex) - LocalB(MinLumIndex)
+            Dim VectMagnitudeSquare As Long = (VectR * VectR) + (VectG * VectG) + (VectB * VectB)
+            If VectMagnitudeSquare > 0 Then
+                Dim TotalCrossProductSquare As Long = 0
+                For i As Integer = 0 To 15
+                    Dim PVectR As Integer = LocalR(i) - LocalR(MinLumIndex)
+                    Dim PVectG As Integer = LocalG(i) - LocalG(MinLumIndex)
+                    Dim PVectB As Integer = LocalB(i) - LocalB(MinLumIndex)
+                    Dim CrossProductR As Long = (PVectG * VectB) - (PVectB * VectG)
+                    Dim CrossProductG As Long = (PVectB * VectR) - (PVectR * VectB)
+                    Dim CrossProductB As Long = (PVectR * VectG) - (PVectG * VectR)
+                    TotalCrossProductSquare += (CrossProductR * CrossProductR) + (CrossProductG * CrossProductG) + (CrossProductB * CrossProductB)
+                Next
+                Dim ColinearThreshold As Long = (VectMagnitudeSquare * VectMagnitudeSquare * 20L) >> 8
+                If TotalCrossProductSquare >= ColinearThreshold Then
+                    UseMode1_7 = True
+                End If
+            End If
+        End If
+        If UseMode1_7 Then
+            Dim MaxDistance As Integer = 0
             Dim CornerAIndex As Integer = 0, CornerBIndex As Integer = 0
-            Dim R_Dist As Integer, G_Dist As Integer, B_Dist As Integer, Mask As Integer
+            Dim DiffR As Integer, DiffG As Integer, DiffB As Integer, Mask As Integer
             For i As Integer = 0 To 2
                 For j As Integer = i + 1 To 3
                     Dim CornerA = BlockCorners(i)
                     Dim CornerB = BlockCorners(j)
-                    R_Dist = LocalR(CornerA) - LocalR(CornerB) : Mask = R_Dist >> 31 : R_Dist = (R_Dist + Mask) Xor Mask
-                    G_Dist = LocalG(CornerA) - LocalG(CornerB) : Mask = G_Dist >> 31 : G_Dist = (G_Dist + Mask) Xor Mask
-                    B_Dist = LocalB(CornerA) - LocalB(CornerB) : Mask = B_Dist >> 31 : B_Dist = (B_Dist + Mask) Xor Mask
-                    Dim RGB_Dist As Integer = (R_Dist * R_Dist) + (G_Dist * G_Dist) + (B_Dist * B_Dist)
-                    If RGB_Dist > MaxDist Then
-                        MaxDist = RGB_Dist
+                    DiffR = LocalR(CornerA) - LocalR(CornerB) : Mask = DiffR >> 31 : DiffR = (DiffR + Mask) Xor Mask
+                    DiffG = LocalG(CornerA) - LocalG(CornerB) : Mask = DiffG >> 31 : DiffG = (DiffG + Mask) Xor Mask
+                    DiffB = LocalB(CornerA) - LocalB(CornerB) : Mask = DiffB >> 31 : DiffB = (DiffB + Mask) Xor Mask
+                    Dim RgbDistance As Integer = (DiffR * DiffR) + (DiffG * DiffG) + (DiffB * DiffB)
+                    If RgbDistance > MaxDistance Then
+                        MaxDistance = RgbDistance
                         CornerAIndex = CornerA
                         CornerBIndex = CornerB
                     End If
                 Next
             Next
-            Dim CornerA_R = LocalR(CornerAIndex), CornerA_G = LocalG(CornerAIndex), CornerA_B = LocalB(CornerAIndex)
-            Dim CornerB_R = LocalR(CornerBIndex), CornerB_G = LocalG(CornerBIndex), CornerB_B = LocalB(CornerBIndex)
-            Dim shapeBits As Integer = 0
+            Dim CornerAR = LocalR(CornerAIndex), CornerAG = LocalG(CornerAIndex), CornerAB = LocalB(CornerAIndex)
+            Dim CornerBR = LocalR(CornerBIndex), CornerBG = LocalG(CornerBIndex), CornerBB = LocalB(CornerBIndex)
+            Dim ShapeBits As Integer = 0
             For c As Integer = 0 To 3
                 Dim CornerIndex = BlockCorners(c)
-                R_Dist = LocalR(CornerIndex) - CornerA_R : Mask = R_Dist >> 31 : R_Dist = (R_Dist + Mask) Xor Mask
-                G_Dist = LocalG(CornerIndex) - CornerA_G : Mask = G_Dist >> 31 : G_Dist = (G_Dist + Mask) Xor Mask
-                B_Dist = LocalB(CornerIndex) - CornerA_B : Mask = B_Dist >> 31 : B_Dist = (B_Dist + Mask) Xor Mask
-                Dim dA_dist As Integer = (R_Dist * R_Dist) + (G_Dist * G_Dist) + (B_Dist * B_Dist)
-                R_Dist = LocalR(CornerIndex) - CornerB_R : Mask = R_Dist >> 31 : R_Dist = (R_Dist + Mask) Xor Mask
-                G_Dist = LocalG(CornerIndex) - CornerB_G : Mask = G_Dist >> 31 : G_Dist = (G_Dist + Mask) Xor Mask
-                B_Dist = LocalB(CornerIndex) - CornerB_B : Mask = B_Dist >> 31 : B_Dist = (B_Dist + Mask) Xor Mask
-                Dim dB_Dist As Integer = (R_Dist * R_Dist) + (G_Dist * G_Dist) + (B_Dist * B_Dist)
-                Dim target As Integer = If(dA_dist < dB_Dist, 0, 1)
-                shapeBits = shapeBits Or (target << (3 - c))
+                DiffR = LocalR(CornerIndex) - CornerAR : Mask = DiffR >> 31 : DiffR = (DiffR + Mask) Xor Mask
+                DiffG = LocalG(CornerIndex) - CornerAG : Mask = DiffG >> 31 : DiffG = (DiffG + Mask) Xor Mask
+                DiffB = LocalB(CornerIndex) - CornerAB : Mask = DiffB >> 31 : DiffB = (DiffB + Mask) Xor Mask
+                Dim DistanceToA As Integer = (DiffR * DiffR) + (DiffG * DiffG) + (DiffB * DiffB)
+                DiffR = LocalR(CornerIndex) - CornerBR : Mask = DiffR >> 31 : DiffR = (DiffR + Mask) Xor Mask
+                DiffG = LocalG(CornerIndex) - CornerBG : Mask = DiffG >> 31 : DiffG = (DiffG + Mask) Xor Mask
+                DiffB = LocalB(CornerIndex) - CornerBB : Mask = DiffB >> 31 : DiffB = (DiffB + Mask) Xor Mask
+                Dim DistanceToB As Integer = (DiffR * DiffR) + (DiffG * DiffG) + (DiffB * DiffB)
+                Dim TargetSubset As Integer = If(DistanceToA < DistanceToB, 0, 1)
+                ShapeBits = ShapeBits Or (TargetSubset << (3 - c))
             Next
-            If (shapeBits And 8) = 8 Then shapeBits = (Not shapeBits) And 15
-            Dim BestIndex As Integer = ParitionMap(shapeBits And 7)
+            If (ShapeBits And 8) = 8 Then ShapeBits = (Not ShapeBits) And 15
+            Dim BestIndex As Integer = ParitionMap(ShapeBits And 7)
             If BestIndex <> -1 Then
-                Dim subMask = PartitionTable2(BestIndex)
-                If maxA - minA > 0 Then
-                    GetEndpointsPCA(subMask, 0, LocalR, LocalG, LocalB, LocalA, 3, 3, 1, Endpoints, 0, Indicies, PBits)
-                    GetEndpointsPCA(subMask, 1, LocalR, LocalG, LocalB, LocalA, 3, 3, 1, Endpoints, 8, Indicies, PBits)
+                Dim SubMask = PartitionTable2(BestIndex)
+                If MaxA - MinA > 0 Then
+                    GetEndpointsPCA(SubMask, 0, LocalR, LocalG, LocalB, LocalA, 3, 3, 1, Endpoints, 0, Indicies, PBits)
+                    GetEndpointsPCA(SubMask, 1, LocalR, LocalG, LocalB, LocalA, 3, 3, 1, Endpoints, 8, Indicies, PBits)
                     EncodeMode7(BestIndex, Endpoints, Indicies, Result, OutputOffset, PBits)
                     Return
                 Else
-                    GetEndpointsPCA(subMask, 0, LocalR, LocalG, LocalB, LocalA, 2, 7, 0, Endpoints, 0, Indicies, PBits)
-                    GetEndpointsPCA(subMask, 1, LocalR, LocalG, LocalB, LocalA, 2, 7, 0, Endpoints, 8, Indicies, PBits)
+                    GetEndpointsPCA(SubMask, 0, LocalR, LocalG, LocalB, LocalA, 2, 7, 0, Endpoints, 0, Indicies, PBits)
+                    GetEndpointsPCA(SubMask, 1, LocalR, LocalG, LocalB, LocalA, 2, 7, 0, Endpoints, 8, Indicies, PBits)
                     EncodeMode1(BestIndex, Endpoints, Indicies, Result, OutputOffset, PBits)
                     Return
                 End If
