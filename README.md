@@ -55,22 +55,22 @@ Comparison testing was done on a i9-9980HK (2019), strictly on the CPU.  Results
 
 ## Quality
 Kodak Lossless TrueColor Image Suite Benchmarks (24 Images)
-| MSE | TexConv BC7 | TexInspect BC7 | TexConv BC3 | TexInspect BC3 |
+| MSE | TexInspect BC7 | TexConv BC7 | TexInspect BC1 | TexConv BC1 | 
 | :--- | :--- | :--- | :--- | :--- |
-| **Average** | 4.6653 | 4.2614 | 21.1078 | 31.0008 |
-| **Worst-Case** | 10.1183 | 8.7888 | 47.2959 | 71.734 |
+| **Average** | 3.8842 | 4.6653 | 27.7148 | 21.1078 |
+| **Worst-Case** | 7.3664 | 10.1183 | 67.3331 | 47.2959 |
 > MSE Reference: 0 = Lossless | <2 = Indistinguishable | <20 = Excellent | <65 = Acceptable
 
-| PSNR | TexConv BC7 | TexInspect BC7 | TexConv BC3 | TexInspect BC3 |
+| PSNR | TexInspect BC7 | TexConv BC7 | TexInspect BC1 | TexConv BC1 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Average** | 41.9745 dB | 42.3055 dB | 35.3033 dB | 33.7313 dB |
-| **Worst-Case** | 38.0797 dB | 38.6915 dB | 31.3826 dB | 29.5736 dB |
+| **Average** | 42.668 dB | 41.9745 dB | 34.255 dB | 35.3033 dB |
+| **Worst-Case** | 39.4583 | 38.0797 dB | 29.8485 dB | 31.3826 dB |
 > PSNR Reference: 128 = Lossless | >45 dB = Indistinguishable | >35 dB = Excellent | >30 dB = Acceptable
 
-| SSIM | TexConv BC7 | TexInspect BC7 | TexConv BC3 | TexInspect BC3 |
+| SSIM | TexInspect BC7 | TexConv BC7 | TexInspect BC1 | TexConv BC1 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Average** | 0.9909 | 0.9908 | 0.9608 | 0.9580 |
-| **Worst-Case** | 0.9862 | 0.9830 | 0.9476 | 0.9398 |
+| **Average** | 0.9912 | 0.9923 | 0.9616 | 0.9608 |
+| **Worst-Case** | 0.9834 | 0.9879 | 0.9482 | 0.9476 |
 > SSIM Reference: 1.0 = Lossless | >0.98 = Indistinguishable | >0.95 = Excellent | >0.90 = Acceptable
 
 ## CLI Usage
