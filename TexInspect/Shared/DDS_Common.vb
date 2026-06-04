@@ -129,7 +129,7 @@ Public Module DDS_Common
 
     ' BC7 Mode 1/7 Heuristic Tables (2-Subset)
     Public ReadOnly BlockCorners() As Integer = {0, 3, 12, 15}
-    Public ReadOnly ParitionMap() As Integer = {-1, 7, 21, 13, 19, 0, 35, 6}
+    Public ReadOnly PartitionMap() As Integer = {-1, 7, 21, 13, 19, 0, 35, 6}
 
     ' Catmull-Rom Weight Table
     Public ReadOnly Weight4x4() As Integer = {1, -9, -9, 1, -9, 81, 81, -9, -9, 81, 81, -9, 1, -9, -9, 1}

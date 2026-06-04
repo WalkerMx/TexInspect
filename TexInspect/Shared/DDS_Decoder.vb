@@ -47,6 +47,7 @@ Public Class DDS_Decoder
 
     Private FilePath As String
     Private SourceBytes As Byte()
+    Private EncodedBytes As Byte()
     Private DecodedBytes As Byte()
 
     <ThreadStatic> Private Shared BufferA As Integer()
@@ -60,58 +61,65 @@ Public Class DDS_Decoder
     Public Sub New(Source As String)
         FilePath = Source
         If FilePath.ToLower.Contains("_n.dds") Then IsNormalMap = True
-        ReadHeader(Source)
+        Using FS As New FileStream(Source, FileMode.Open, FileAccess.Read)
+            ReadHeader(FS)
+        End Using
     End Sub
 
-    Private Sub ReadHeader(Source As String)
-        Using FS As New FileStream(Source, FileMode.Open, FileAccess.Read)
-            Using Reader As New BinaryReader(FS)
+    Public Sub New(Source As Byte())
+        EncodedBytes = Source
+        Using FS As New MemoryStream(EncodedBytes)
+            ReadHeader(FS)
+        End Using
+    End Sub
 
-                Signature = New String(Reader.ReadChars(4))             ' dwMagic
-                HeaderSize = Reader.ReadInt32()                         ' dwSize
-                SurfaceFlags = Reader.ReadInt32()                       ' dwFlags
-                Height = Reader.ReadInt32()                             ' dwHeight
-                Width = Reader.ReadInt32()                              ' dwWidth
-                PitchLinearSize = Reader.ReadInt32()                    ' dwPitchOrLinearSize
-                Depth = Reader.ReadInt32()                              ' dwDepth
-                MipMapCount = Reader.ReadInt32()                        ' dwMipMapCount
+    Private Sub ReadHeader(Source As Stream)
+        Using Reader As New BinaryReader(Source)
 
-                Reader.BaseStream.Seek(44, SeekOrigin.Current)          ' dwReserved1 x11
+            Signature = New String(Reader.ReadChars(4))             ' dwMagic
+            HeaderSize = Reader.ReadInt32()                         ' dwSize
+            SurfaceFlags = Reader.ReadInt32()                       ' dwFlags
+            Height = Reader.ReadInt32()                             ' dwHeight
+            Width = Reader.ReadInt32()                              ' dwWidth
+            PitchLinearSize = Reader.ReadInt32()                    ' dwPitchOrLinearSize
+            Depth = Reader.ReadInt32()                              ' dwDepth
+            MipMapCount = Reader.ReadInt32()                        ' dwMipMapCount
 
-                SubHeaderSize = Reader.ReadInt32()                      ' DDPIXELFORMAT dwSize
-                PixelFlags = Reader.ReadInt32()                         ' DDPIXELFORMAT dwFlags
-                FourCC = New String(Reader.ReadChars(4))                ' DDPIXELFORMAT dwFourCC
-                RGBBitCount = Reader.ReadInt32()                        ' DDPIXELFORMAT dwRGBBitCount
-                RedBitMask = Reader.ReadUInt32()                        ' DDPIXELFORMAT dwRBitMask
-                GreenBitMask = Reader.ReadUInt32()                      ' DDPIXELFORMAT dwGBitMask
-                BlueBitMask = Reader.ReadUInt32()                       ' DDPIXELFORMAT dwBBitMask
-                AlphaBitMask = Reader.ReadUInt32()                      ' DDPIXELFORMAT dwABitMask
+            Reader.BaseStream.Seek(44, SeekOrigin.Current)          ' dwReserved1 x11
 
-                Caps1 = Reader.ReadInt32()                              ' dwCaps
-                Caps2 = Reader.ReadInt32()                              ' dwCaps2
+            SubHeaderSize = Reader.ReadInt32()                      ' DDPIXELFORMAT dwSize
+            PixelFlags = Reader.ReadInt32()                         ' DDPIXELFORMAT dwFlags
+            FourCC = New String(Reader.ReadChars(4))                ' DDPIXELFORMAT dwFourCC
+            RGBBitCount = Reader.ReadInt32()                        ' DDPIXELFORMAT dwRGBBitCount
+            RedBitMask = Reader.ReadUInt32()                        ' DDPIXELFORMAT dwRBitMask
+            GreenBitMask = Reader.ReadUInt32()                      ' DDPIXELFORMAT dwGBitMask
+            BlueBitMask = Reader.ReadUInt32()                       ' DDPIXELFORMAT dwBBitMask
+            AlphaBitMask = Reader.ReadUInt32()                      ' DDPIXELFORMAT dwABitMask
 
-                Reader.BaseStream.Seek(12, SeekOrigin.Current)          ' dwCaps3, dwCaps4, dwReserved2
+            Caps1 = Reader.ReadInt32()                              ' dwCaps
+            Caps2 = Reader.ReadInt32()                              ' dwCaps2
 
-                If FourCC = "DX10" Then
-                    ExtendedHeader = True
-                    DXGIFormat = Reader.ReadInt32()                     ' dxgiFormat
-                    ResourceDimension = Reader.ReadInt32()              ' resourceDimension
-                    MiscFlag = Reader.ReadInt32()                       ' miscFlag
-                    ArraySize = Reader.ReadInt32()                      ' arraySize
-                    MiscFlags2 = Reader.ReadInt32()                     ' miscFlags2
-                    Select Case DXGIFormat
-                        Case DXGI_Format.DXGI_FORMAT_B8G8R8A8_UNORM : SetMask(2, 1, 0, 3) : RGBBitCount = 32
-                        Case DXGI_Format.DXGI_FORMAT_B8G8R8X8_UNORM : SetMask(2, 1, 0) : RGBBitCount = 32
-                    End Select
-                End If
+            Reader.BaseStream.Seek(12, SeekOrigin.Current)          ' dwCaps3, dwCaps4, dwReserved2
 
-                If ExtendedHeader Then
-                    If (MiscFlag And &H4) = &H4 Then IsCubeMap = True   ' D3D10_RESOURCE_MISC_TEXTURECUBE
-                Else
-                    If (Caps2 And &H200) = &H200 Then IsCubeMap = True  ' DDSCAPS2_CUBEMAP = &H200
-                End If
+            If FourCC = "DX10" Then
+                ExtendedHeader = True
+                DXGIFormat = Reader.ReadInt32()                     ' dxgiFormat
+                ResourceDimension = Reader.ReadInt32()              ' resourceDimension
+                MiscFlag = Reader.ReadInt32()                       ' miscFlag
+                ArraySize = Reader.ReadInt32()                      ' arraySize
+                MiscFlags2 = Reader.ReadInt32()                     ' miscFlags2
+                Select Case DXGIFormat
+                    Case DXGI_Format.DXGI_FORMAT_B8G8R8A8_UNORM : SetMask(2, 1, 0, 3) : RGBBitCount = 32
+                    Case DXGI_Format.DXGI_FORMAT_B8G8R8X8_UNORM : SetMask(2, 1, 0) : RGBBitCount = 32
+                End Select
+            End If
 
-            End Using
+            If ExtendedHeader Then
+                If (MiscFlag And &H4) = &H4 Then IsCubeMap = True   ' D3D10_RESOURCE_MISC_TEXTURECUBE
+            Else
+                If (Caps2 And &H200) = &H200 Then IsCubeMap = True  ' DDSCAPS2_CUBEMAP = &H200
+            End If
+
         End Using
     End Sub
 
@@ -193,7 +201,13 @@ Public Class DDS_Decoder
             End If
         End If
         If BytesToRead > 0 Then
-            SourceBytes = GetFileBytes(FilePath, Offset, BytesToRead)
+            If EncodedBytes IsNot Nothing AndAlso EncodedBytes.Length > 0 Then
+                Using ms As New MemoryStream(EncodedBytes)
+                    SourceBytes = GetFileBytes(ms, Offset, BytesToRead)
+                End Using
+            Else
+                SourceBytes = GetFileBytes(FilePath, Offset, BytesToRead)
+            End If
             If CompressionMode = -1 Then
                 DecodeUncompressed(AlphaMode)
             Else
@@ -978,9 +992,24 @@ Public Class DDS_Decoder
         Return Buffer
     End Function
 
+    Private Function GetFileBytes(Source As Stream, Offset As Long, Count As Integer) As Byte()
+        Dim Buffer() As Byte = New Byte(Count - 1) {}
+        Source.Seek(Offset, SeekOrigin.Begin)
+        Dim totalBytesRead As Integer = 0
+        While totalBytesRead < Count
+            Dim bytesRead As Integer = Source.Read(Buffer, totalBytesRead, Count - totalBytesRead)
+            If bytesRead = 0 Then
+                Throw New EndOfStreamException($"Unexpected end of file. Expected {Count} bytes, but only found {totalBytesRead}.")
+            End If
+            totalBytesRead += bytesRead
+        End While
+        Return Buffer
+    End Function
+
     Protected Overridable Sub Dispose(Disposing As Boolean)
         If Not Disposed Then
             SourceBytes = Nothing
+            EncodedBytes = Nothing
             DecodedBytes = Nothing
         End If
         Disposed = True

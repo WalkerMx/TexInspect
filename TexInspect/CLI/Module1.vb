@@ -51,7 +51,7 @@ Public Module Module1
             ExecuteCommand(CliOpts)
             If CliOpts.BenchEnabled Then
                 BenchTimer.Stop()
-                Console.WriteLine($"{vbCrLf}Execution Time: {BenchTimer.ElapsedMilliseconds / 1000} seconds")
+                Console.WriteLine($"{vbCrLf}Execution Time: {BenchTimer.ElapsedMilliseconds / 1000D} seconds")
             End If
         Catch ex As Exception
             Console.WriteLine($"[CRITICAL ERROR] {ex.Message}")

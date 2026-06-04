@@ -4,6 +4,7 @@
 ' https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dx-graphics-dds
 
 Imports System.IO
+Imports System.Net.NetworkInformation
 Imports System.Threading
 
 Public Class DDS_Encoder
@@ -67,7 +68,7 @@ Public Class DDS_Encoder
     ''' <summary>
     ''' Creates a DDS Image from a file on the disk.
     ''' </summary>
-    ''' <param name="Source">Image to create DDS from.</param>
+    ''' <param name="Source">Image file to create DDS from.</param>
     ''' <param name="Format">The explicit DXGI format to encode to.</param>
     ''' <param name="MipMaps">Create mipmaps for distant objects.</param>
     ''' <param name="LegacySupport">If true, strips the DX10 header and uses standard FourCC/Bitmasks. Throws an exception if the format requires DX10.</param>
@@ -492,12 +493,13 @@ Public Class DDS_Encoder
         End If
     End Sub
 
-    Private Sub EncodeBlockBC7(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, Result As Byte(), OutputOffset As Integer, LocalB() As Integer, LocalG() As Integer, LocalR() As Integer, LocalA() As Integer, Endpoints() As Integer, Indicies() As Integer)
+    Private Sub EncodeBlockBC7(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, Result As Byte(), OutputOffset As Integer, LocalB() As Integer, LocalG() As Integer, LocalR() As Integer, LocalA() As Integer, Endpoints() As Integer, Indices() As Integer)
         Dim LocalIndex As Integer = 0
         Dim MinA As Integer = 255, MaxA As Integer = 0
         Dim SumB As Integer = 0, SumSquareB As Integer = 0
         Dim SumG As Integer = 0, SumSquareG As Integer = 0
         Dim SumR As Integer = 0, SumSquareR As Integer = 0
+        Dim SumA As Integer = 0, SumSquareA As Integer = 0
         Dim MinLumIndex As Integer = 0, MaxLumIndex As Integer = 0
         Dim MinLum As Integer = 1000, MaxLum As Integer = -1
         Dim WidthBound As Integer = Width - 1
@@ -522,6 +524,7 @@ Public Class DDS_Encoder
                 SumB += ValB : SumSquareB += (ValB * ValB)
                 SumG += ValG : SumSquareG += (ValG * ValG)
                 SumR += ValR : SumSquareR += (ValR * ValR)
+                SumA += ValA : SumSquareA += (ValA * ValA)
                 If ValA < MinA Then MinA = ValA
                 If ValA > MaxA Then MaxA = ValA
                 Dim Lum As Integer = ValR + ValG + ValB
@@ -543,13 +546,14 @@ Public Class DDS_Encoder
         Dim VarR As Integer = (SumSquareR << 4) - (SumR * SumR)
         Dim VarG As Integer = (SumSquareG << 4) - (SumG * SumG)
         Dim VarB As Integer = (SumSquareB << 4) - (SumB * SumB)
+        Dim VarA As Integer = (SumSquareA << 4) - (SumA * SumA)
         Dim MaxVar As Integer = VarR
         If VarG > MaxVar Then MaxVar = VarG
         If VarB > MaxVar Then MaxVar = VarB
-        Dim VarThreshold As Integer = 38400
+        Dim VarThreshold1 As Integer = 27750
         Dim UseMode1_7 As Boolean = False
         Dim PBits As Integer = 0
-        If MaxVar >= VarThreshold Then
+        If MaxVar >= VarThreshold1 Then
             Dim VectR As Integer = LocalR(MaxLumIndex) - LocalR(MinLumIndex)
             Dim VectG As Integer = LocalG(MaxLumIndex) - LocalG(MinLumIndex)
             Dim VectB As Integer = LocalB(MaxLumIndex) - LocalB(MinLumIndex)
@@ -565,7 +569,7 @@ Public Class DDS_Encoder
                     Dim CrossProductB As Long = (PVectR * VectG) - (PVectG * VectR)
                     TotalCrossProductSquare += (CrossProductR * CrossProductR) + (CrossProductG * CrossProductG) + (CrossProductB * CrossProductB)
                 Next
-                Dim ColinearThreshold As Long = (VectMagnitudeSquare * VectMagnitudeSquare * 20L) >> 8
+                Dim ColinearThreshold As Long = (VectMagnitudeSquare * VectMagnitudeSquare * 10L) >> 8
                 If TotalCrossProductSquare >= ColinearThreshold Then
                     UseMode1_7 = True
                 End If
@@ -574,14 +578,14 @@ Public Class DDS_Encoder
         If UseMode1_7 Then
             Dim MaxDistance As Integer = 0
             Dim CornerAIndex As Integer = 0, CornerBIndex As Integer = 0
-            Dim DiffR As Integer, DiffG As Integer, DiffB As Integer, Mask As Integer
+            Dim DiffR As Integer, DiffG As Integer, DiffB As Integer
             For i As Integer = 0 To 2
                 For j As Integer = i + 1 To 3
                     Dim CornerA = BlockCorners(i)
                     Dim CornerB = BlockCorners(j)
-                    DiffR = LocalR(CornerA) - LocalR(CornerB) : Mask = DiffR >> 31 : DiffR = (DiffR + Mask) Xor Mask
-                    DiffG = LocalG(CornerA) - LocalG(CornerB) : Mask = DiffG >> 31 : DiffG = (DiffG + Mask) Xor Mask
-                    DiffB = LocalB(CornerA) - LocalB(CornerB) : Mask = DiffB >> 31 : DiffB = (DiffB + Mask) Xor Mask
+                    DiffR = LocalR(CornerA) - LocalR(CornerB)
+                    DiffG = LocalG(CornerA) - LocalG(CornerB)
+                    DiffB = LocalB(CornerA) - LocalB(CornerB)
                     Dim RgbDistance As Integer = (DiffR * DiffR) + (DiffG * DiffG) + (DiffB * DiffB)
                     If RgbDistance > MaxDistance Then
                         MaxDistance = RgbDistance
@@ -595,36 +599,35 @@ Public Class DDS_Encoder
             Dim ShapeBits As Integer = 0
             For c As Integer = 0 To 3
                 Dim CornerIndex = BlockCorners(c)
-                DiffR = LocalR(CornerIndex) - CornerAR : Mask = DiffR >> 31 : DiffR = (DiffR + Mask) Xor Mask
-                DiffG = LocalG(CornerIndex) - CornerAG : Mask = DiffG >> 31 : DiffG = (DiffG + Mask) Xor Mask
-                DiffB = LocalB(CornerIndex) - CornerAB : Mask = DiffB >> 31 : DiffB = (DiffB + Mask) Xor Mask
+                DiffR = LocalR(CornerIndex) - CornerAR
+                DiffG = LocalG(CornerIndex) - CornerAG
+                DiffB = LocalB(CornerIndex) - CornerAB
                 Dim DistanceToA As Integer = (DiffR * DiffR) + (DiffG * DiffG) + (DiffB * DiffB)
-                DiffR = LocalR(CornerIndex) - CornerBR : Mask = DiffR >> 31 : DiffR = (DiffR + Mask) Xor Mask
-                DiffG = LocalG(CornerIndex) - CornerBG : Mask = DiffG >> 31 : DiffG = (DiffG + Mask) Xor Mask
-                DiffB = LocalB(CornerIndex) - CornerBB : Mask = DiffB >> 31 : DiffB = (DiffB + Mask) Xor Mask
+                DiffR = LocalR(CornerIndex) - CornerBR
+                DiffG = LocalG(CornerIndex) - CornerBG
+                DiffB = LocalB(CornerIndex) - CornerBB
                 Dim DistanceToB As Integer = (DiffR * DiffR) + (DiffG * DiffG) + (DiffB * DiffB)
                 Dim TargetSubset As Integer = If(DistanceToA < DistanceToB, 0, 1)
                 ShapeBits = ShapeBits Or (TargetSubset << (3 - c))
             Next
             If (ShapeBits And 8) = 8 Then ShapeBits = (Not ShapeBits) And 15
-            Dim BestIndex As Integer = ParitionMap(ShapeBits And 7)
+            Dim BestIndex As Integer = PartitionMap(ShapeBits And 7)
             If BestIndex <> -1 Then
                 Dim SubMask = PartitionTable2(BestIndex)
-                If MaxA - MinA > 0 Then
-                    GetEndpointsPCA(SubMask, 0, LocalR, LocalG, LocalB, LocalA, 3, 3, 1, Endpoints, 0, Indicies, PBits)
-                    GetEndpointsPCA(SubMask, 1, LocalR, LocalG, LocalB, LocalA, 3, 3, 1, Endpoints, 8, Indicies, PBits)
-                    EncodeMode7(BestIndex, Endpoints, Indicies, Result, OutputOffset, PBits)
-                    Return
+                If MinA = 255 Then
+                    GetEndpointsPCA(SubMask, 0, LocalR, LocalG, LocalB, LocalA, 2, 7, 0, Endpoints, 0, Indices, PBits)
+                    GetEndpointsPCA(SubMask, 1, LocalR, LocalG, LocalB, LocalA, 2, 7, 0, Endpoints, 8, Indices, PBits)
+                    EncodeMode1(BestIndex, Endpoints, Indices, Result, OutputOffset, PBits)
                 Else
-                    GetEndpointsPCA(SubMask, 0, LocalR, LocalG, LocalB, LocalA, 2, 7, 0, Endpoints, 0, Indicies, PBits)
-                    GetEndpointsPCA(SubMask, 1, LocalR, LocalG, LocalB, LocalA, 2, 7, 0, Endpoints, 8, Indicies, PBits)
-                    EncodeMode1(BestIndex, Endpoints, Indicies, Result, OutputOffset, PBits)
-                    Return
+                    GetEndpointsPCA(SubMask, 0, LocalR, LocalG, LocalB, LocalA, 3, 3, 1, Endpoints, 0, Indices, PBits)
+                    GetEndpointsPCA(SubMask, 1, LocalR, LocalG, LocalB, LocalA, 3, 3, 1, Endpoints, 8, Indices, PBits)
+                    EncodeMode7(BestIndex, Endpoints, Indices, Result, OutputOffset, PBits)
                 End If
+                Return
             End If
         End If
-        GetEndpointsPCA(0, 0, LocalR, LocalG, LocalB, LocalA, 1, 15, 1, Endpoints, 0, Indicies, PBits)
-        EncodeMode6(Endpoints, Indicies, Result, OutputOffset, PBits)
+        GetEndpointsPCA(0, 0, LocalR, LocalG, LocalB, LocalA, 1, 15, 1, Endpoints, 0, Indices, PBits)
+        EncodeMode6(Endpoints, Indices, Result, OutputOffset, PBits)
     End Sub
 
     Private Sub EncodeBlockBC3(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, ChannelOffset As Integer, Result As Byte(), OutputOffset As Integer, ChannelArray() As Integer)
@@ -811,7 +814,7 @@ Public Class DDS_Encoder
         Result(OutputOffset + 7) = CByte((ColorTable >> 24) And &HFF)
     End Sub
 
-    Private Sub EncodeBlockBC1(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, Result As Byte(), OutputOffset As Integer, LocalB() As Integer, LocalG() As Integer, LocalR() As Integer, LocalA() As Integer, Endpoints() As Integer, Indicies() As Integer, Optional ByRef AlphaMask As UShort = 0)
+    Private Sub EncodeBlockBC1(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, Result As Byte(), OutputOffset As Integer, LocalB() As Integer, LocalG() As Integer, LocalR() As Integer, LocalA() As Integer, Endpoints() As Integer, Indices() As Integer, Optional ByRef AlphaMask As UShort = 0)
         Dim MaxY As Integer = Height - 1
         Dim MaxX As Integer = Width - 1
         Dim idx As Integer = 0
@@ -839,7 +842,7 @@ Public Class DDS_Encoder
             Next
         Next
         Dim dummyPBits As Integer = 0
-        GetEndpointsPCA(0, 0, LocalR, LocalG, LocalB, LocalA, 0, 3, 0, Endpoints, 0, Indicies, dummyPBits)
+        GetEndpointsPCA(0, 0, LocalR, LocalG, LocalB, LocalA, 0, 3, 0, Endpoints, 0, Indices, dummyPBits)
         Dim ep0R As Integer = Endpoints(0)
         Dim ep1R As Integer = Endpoints(1)
         Dim ep0G As Integer = Endpoints(2)
@@ -899,11 +902,16 @@ Public Class DDS_Encoder
         Dim anchor0 As Integer = 0
         Dim anchor1 As Integer = AnchorIndexTable2(PartitionID)
         Dim t As Integer
+        Dim p0 As ULong = CULng((PBits >> 3) And 1)
+        Dim p1 As ULong = CULng((PBits >> 2) And 1)
+        Dim p2 As ULong = CULng((PBits >> 1) And 1)
+        Dim p3 As ULong = CULng(PBits And 1)
         If Indices(anchor0) >= 2 Then
             t = Endpoints(0) : Endpoints(0) = Endpoints(1) : Endpoints(1) = t
             t = Endpoints(2) : Endpoints(2) = Endpoints(3) : Endpoints(3) = t
             t = Endpoints(4) : Endpoints(4) = Endpoints(5) : Endpoints(5) = t
             t = Endpoints(6) : Endpoints(6) = Endpoints(7) : Endpoints(7) = t
+            Dim pTemp As ULong = p0 : p0 = p1 : p1 = pTemp
             For i = 0 To 15
                 If ((subMask >> i) And 1) = 0 Then Indices(i) = 3 - Indices(i)
             Next
@@ -913,6 +921,7 @@ Public Class DDS_Encoder
             t = Endpoints(10) : Endpoints(10) = Endpoints(11) : Endpoints(11) = t
             t = Endpoints(12) : Endpoints(12) = Endpoints(13) : Endpoints(13) = t
             t = Endpoints(14) : Endpoints(14) = Endpoints(15) : Endpoints(15) = t
+            Dim pTemp As ULong = p2 : p2 = p3 : p3 = pTemp
             For i = 0 To 15
                 If ((subMask >> i) And 1) = 1 Then Indices(i) = 3 - Indices(i)
             Next
@@ -935,10 +944,10 @@ Public Class DDS_Encoder
         HighBytes = HighBytes Or (CULng(Endpoints(7)) << 15)
         HighBytes = HighBytes Or (CULng(Endpoints(14)) << 20)
         HighBytes = HighBytes Or (CULng(Endpoints(15)) << 25)
-        HighBytes = HighBytes Or (CULng(PBits And &H8) << 27)
-        HighBytes = HighBytes Or (CULng(PBits And &H4) << 29)
-        HighBytes = HighBytes Or (CULng(PBits And &H2) << 31)
-        HighBytes = HighBytes Or (CULng(PBits And &H1) << 33)
+        HighBytes = HighBytes Or (p0 << 30)
+        HighBytes = HighBytes Or (p1 << 31)
+        HighBytes = HighBytes Or (p2 << 32)
+        HighBytes = HighBytes Or (p3 << 33)
         Dim bitOffset As Integer = 34
         For i = 0 To 15
             Dim bits As Integer = If(i = anchor0 OrElse i = anchor1, 1, 2)
@@ -952,12 +961,15 @@ Public Class DDS_Encoder
     End Sub
 
     Private Sub EncodeMode6(Endpoints() As Integer, Indices() As Integer, Result As Byte(), OutputOffset As Integer, PBits As Integer)
+        Dim p0 As ULong = CULng((PBits >> 1) And 1)
+        Dim p1 As ULong = CULng(PBits And 1)
         If Indices(0) >= 8 Then
             Dim t As Integer
             t = Endpoints(0) : Endpoints(0) = Endpoints(1) : Endpoints(1) = t
             t = Endpoints(2) : Endpoints(2) = Endpoints(3) : Endpoints(3) = t
             t = Endpoints(4) : Endpoints(4) = Endpoints(5) : Endpoints(5) = t
             t = Endpoints(6) : Endpoints(6) = Endpoints(7) : Endpoints(7) = t
+            Dim pTemp As ULong = p0 : p0 = p1 : p1 = pTemp
             For i As Integer = 0 To 15
                 Indices(i) = 15 - Indices(i)
             Next
@@ -971,8 +983,8 @@ Public Class DDS_Encoder
         LowBytes = LowBytes Or (CULng(Endpoints(5)) << 42)
         LowBytes = LowBytes Or (CULng(Endpoints(6)) << 49)
         LowBytes = LowBytes Or (CULng(Endpoints(7)) << 56)
-        LowBytes = LowBytes Or (CULng(PBits And &H2) << 62)
-        Dim HighBytes As ULong = CULng(PBits And &H1)
+        LowBytes = LowBytes Or (p0 << 63)
+        Dim HighBytes As ULong = p1
         HighBytes = HighBytes Or ((CULng(Indices(0)) And 7UL) << 1)
         For i As Integer = 1 To 15
             HighBytes = HighBytes Or ((CULng(Indices(i)) And 15UL) << (i * 4))
