@@ -4,7 +4,6 @@
 ' https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dx-graphics-dds
 
 Imports System.IO
-Imports System.Net.NetworkInformation
 Imports System.Threading
 
 Public Class DDS_Encoder
@@ -550,10 +549,10 @@ Public Class DDS_Encoder
         Dim MaxVar As Integer = VarR
         If VarG > MaxVar Then MaxVar = VarG
         If VarB > MaxVar Then MaxVar = VarB
-        Dim VarThreshold1 As Integer = 27750
+        Dim VarThreshold As Integer = 27750
         Dim UseMode1_7 As Boolean = False
         Dim PBits As Integer = 0
-        If MaxVar >= VarThreshold1 Then
+        If MaxVar >= VarThreshold Then
             Dim VectR As Integer = LocalR(MaxLumIndex) - LocalR(MinLumIndex)
             Dim VectG As Integer = LocalG(MaxLumIndex) - LocalG(MinLumIndex)
             Dim VectB As Integer = LocalB(MaxLumIndex) - LocalB(MinLumIndex)
@@ -849,6 +848,18 @@ Public Class DDS_Encoder
         Dim ep1G As Integer = Endpoints(3)
         Dim ep0B As Integer = Endpoints(4)
         Dim ep1B As Integer = Endpoints(5)
+        Dim rangeR As Integer = ep1R - ep0R
+        Dim rangeG As Integer = ep1G - ep0G
+        Dim rangeB As Integer = ep1B - ep0B
+        Dim insetR As Integer = (rangeR + 8) >> 4
+        Dim insetG As Integer = (rangeG + 8) >> 4
+        Dim insetB As Integer = (rangeB + 8) >> 4
+        ep0R = Math.Min(255, Math.Max(0, ep0R + insetR))
+        ep1R = Math.Min(255, Math.Max(0, ep1R - insetR))
+        ep0G = Math.Min(255, Math.Max(0, ep0G + insetG))
+        ep1G = Math.Min(255, Math.Max(0, ep1G - insetG))
+        ep0B = Math.Min(255, Math.Max(0, ep0B + insetB))
+        ep1B = Math.Min(255, Math.Max(0, ep1B - insetB))
         Dim Col0 As UShort = CUShort(((ep0R And &HF8) << 8) Or ((ep0G And &HFC) << 3) Or (ep0B >> 3))
         Dim Col1 As UShort = CUShort(((ep1R And &HF8) << 8) Or ((ep1G And &HFC) << 3) Or (ep1B >> 3))
         If Col0 < Col1 Then
@@ -862,37 +873,63 @@ Public Class DDS_Encoder
         Dim R1 As Integer = (Col1 >> 8) And &HF8 : R1 = R1 Or (R1 >> 5)
         Dim G1 As Integer = (Col1 >> 3) And &HFC : G1 = G1 Or (G1 >> 6)
         Dim B1 As Integer = (Col1 << 3) And &HF8 : B1 = B1 Or (B1 >> 5)
-        Dim R2 As Integer = (2 * R0 + R1 + 1) \ 3 : Dim G2 As Integer = (2 * G0 + G1 + 1) \ 3 : Dim B2 As Integer = (2 * B0 + B1 + 1) \ 3
-        Dim R3 As Integer = (R0 + 2 * R1 + 1) \ 3 : Dim G3 As Integer = (G0 + 2 * G1 + 1) \ 3 : Dim B3 As Integer = (B0 + 2 * B1 + 1) \ 3
-        Dim ColorTable As UInteger = 0
+        Dim R2_4 As Integer = (2 * R0 + R1 + 1) \ 3 : Dim G2_4 As Integer = (2 * G0 + G1 + 1) \ 3 : Dim B2_4 As Integer = (2 * B0 + B1 + 1) \ 3
+        Dim R3_4 As Integer = (R0 + 2 * R1 + 1) \ 3 : Dim G3_4 As Integer = (G0 + 2 * G1 + 1) \ 3 : Dim B3_4 As Integer = (B0 + 2 * B1 + 1) \ 3
+        Dim R2_3 As Integer = (R0 + R1) \ 2 : Dim G2_3 As Integer = (G0 + G1) \ 2 : Dim B2_3 As Integer = (B0 + B1) \ 2
+        Dim ColorTable4c As UInteger = 0
+        Dim ColorTable3c As UInteger = 0
+        Dim TotalErr4c As Integer = 0
+        Dim TotalErr3c As Integer = 0
         Dim shift As Integer = 0
         For i As Integer = 0 To 15
             Dim PixR As Integer = LocalR(i)
             Dim PixG As Integer = LocalG(i)
             Dim PixB As Integer = LocalB(i)
             Dim dR As Integer = PixR - R0 : Dim dG As Integer = PixG - G0 : Dim dB As Integer = PixB - B0
-            Dim minErr As Integer = (dR * dR * 3) + (dG * dG * 4) + (dB * dB * 2)
-            Dim Index As UInteger = 0
+            Dim err0 As Integer = (dR * dR * 3) + (dG * dG * 4) + (dB * dB * 2)
             dR = PixR - R1 : dG = PixG - G1 : dB = PixB - B1
-            Dim err As Integer = (dR * dR * 3) + (dG * dG * 4) + (dB * dB * 2)
-            If err < minErr Then minErr = err : Index = 1
-            dR = PixR - R2 : dG = PixG - G2 : dB = PixB - B2
-            err = (dR * dR * 3) + (dG * dG * 4) + (dB * dB * 2)
-            If err < minErr Then minErr = err : Index = 2
-            dR = PixR - R3 : dG = PixG - G3 : dB = PixB - B3
-            err = (dR * dR * 3) + (dG * dG * 4) + (dB * dB * 2)
-            If err < minErr Then Index = 3
-            ColorTable = ColorTable Or (Index << shift)
+            Dim err1 As Integer = (dR * dR * 3) + (dG * dG * 4) + (dB * dB * 2)
+            Dim minErr4 As Integer = err0
+            Dim Index4 As UInteger = 0
+            If err1 < minErr4 Then minErr4 = err1 : Index4 = 1
+            dR = PixR - R2_4 : dG = PixG - G2_4 : dB = PixB - B2_4
+            Dim err2_4 As Integer = (dR * dR * 3) + (dG * dG * 4) + (dB * dB * 2)
+            If err2_4 < minErr4 Then minErr4 = err2_4 : Index4 = 2
+            dR = PixR - R3_4 : dG = PixG - G3_4 : dB = PixB - B3_4
+            Dim err3_4 As Integer = (dR * dR * 3) + (dG * dG * 4) + (dB * dB * 2)
+            If err3_4 < minErr4 Then minErr4 = err3_4 : Index4 = 3
+            TotalErr4c += minErr4
+            ColorTable4c = ColorTable4c Or (Index4 << shift)
+            Dim minErr3 As Integer = err0
+            Dim Index3 As UInteger = 1
+            If err1 < minErr3 Then minErr3 = err1 : Index3 = 0
+            dR = PixR - R2_3 : dG = PixG - G2_3 : dB = PixB - B2_3
+            Dim err2_3 As Integer = (dR * dR * 3) + (dG * dG * 4) + (dB * dB * 2)
+            If err2_3 < minErr3 Then minErr3 = err2_3 : Index3 = 2
+            TotalErr3c += minErr3
+            ColorTable3c = ColorTable3c Or (Index3 << shift)
             shift += 2
         Next
-        Result(OutputOffset) = CByte(Col0 And &HFF)
-        Result(OutputOffset + 1) = CByte(Col0 >> 8)
-        Result(OutputOffset + 2) = CByte(Col1 And &HFF)
-        Result(OutputOffset + 3) = CByte(Col1 >> 8)
-        Result(OutputOffset + 4) = CByte(ColorTable And &HFF)
-        Result(OutputOffset + 5) = CByte((ColorTable >> 8) And &HFF)
-        Result(OutputOffset + 6) = CByte((ColorTable >> 16) And &HFF)
-        Result(OutputOffset + 7) = CByte((ColorTable >> 24) And &HFF)
+        Dim FinalCol0 As UShort
+        Dim FinalCol1 As UShort
+        Dim FinalColorTable As UInteger
+        If TotalErr3c < TotalErr4c Then
+            FinalCol0 = Col1
+            FinalCol1 = Col0
+            FinalColorTable = ColorTable3c
+        Else
+            FinalCol0 = Col0
+            FinalCol1 = Col1
+            FinalColorTable = ColorTable4c
+        End If
+        Result(OutputOffset) = CByte(FinalCol0 And &HFF)
+        Result(OutputOffset + 1) = CByte(FinalCol0 >> 8)
+        Result(OutputOffset + 2) = CByte(FinalCol1 And &HFF)
+        Result(OutputOffset + 3) = CByte(FinalCol1 >> 8)
+        Result(OutputOffset + 4) = CByte(FinalColorTable And &HFF)
+        Result(OutputOffset + 5) = CByte((FinalColorTable >> 8) And &HFF)
+        Result(OutputOffset + 6) = CByte((FinalColorTable >> 16) And &HFF)
+        Result(OutputOffset + 7) = CByte((FinalColorTable >> 24) And &HFF)
     End Sub
 
 #Region "BC7 Modes"
