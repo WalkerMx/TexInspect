@@ -36,41 +36,41 @@ Comparison testing was done on a i9-9980HK (2019), strictly on the CPU.  Results
 ### Encoding
 | | TexInspect 4K | TexConv 4K | Delta |
 | :--- | :--- | :--- | :--- |
-| BC7 No Mips | 256.78ms | 23226.3ms | 90.5x Faster |
-| BC7 Full Mips | 375.12ms | 32747.8ms | 87.3x Faster |
+| BC7 No Mips | 245.42ms | 23226.3ms | 94.6x Faster |
+| BC7 Full Mips | 388.86ms | 32747.8ms | 84.2x Faster |
 | BC5 No Mips | 197.32ms | 215.8ms | 1.1x Faster |
 | BC5 Full Mips | 310.54ms | 513.9ms | 1.7x Faster |
-| BC3 No Mips | 256.94ms | 428.0ms | 1.7x Faster |
-| BC3 Full Mips | 386.64ms | 790.5ms | 2x Faster |
-| BC1 No Mips | 238.90ms | 409.6ms | 1.7x Faster |
-| BC1 Full Mips | 340.18ms | 766.7ms | 2.3x Faster |
+| BC3 No Mips | 268.72ms | 428.0ms | 1.6x Faster |
+| BC3 Full Mips | 415.56ms | 790.5ms | 1.9x Faster |
+| BC1 No Mips | 248.40ms | 409.6ms | 1.6x Faster |
+| BC1 Full Mips | 352.68ms | 766.7ms | 2.2x Faster |
 
 ### Decoding
 | | TexInspect 4K | TexConv 4K | Delta |
 | :--- | :--- | :--- | :--- |
-| BC7 | 873.44ms | 1013.06ms | 1.2x Faster |
-| BC5 | 662.52ms | 1289.96ms | 1.9x Faster |
-| BC3 | 578.86ms | 839.67ms | 1.5x Faster |
-| BC1 | 695.38ms | 873.15ms | 1.3x Faster |
+| BC7 | 606.96ms | 1013.06ms | 1.7x Faster |
+| BC5 | 632.42ms | 1289.96ms | 2.0x Faster |
+| BC3 | 604.34ms | 839.67ms | 1.4x Faster |
+| BC1 | 573.88ms | 873.15ms | 1.5x Faster |
 
 ## Quality
 Kodak Lossless TrueColor Image Suite Benchmarks (24 Images)
 | MSE | TexInspect BC7 | TexConv BC7 | TexInspect BC1 | TexConv BC1 | 
 | :--- | :--- | :--- | :--- | :--- |
-| **Average** | 3.8842 | 4.6653 | 27.7148 | 21.1078 |
-| **Worst-Case** | 7.3664 | 10.1183 | 67.3331 | 47.2959 |
+| **Average** | 3.7526 | 4.6653 | 21.628 | 21.1078 |
+| **Worst-Case** | 7.1285 | 10.1183 | 51.9012 | 47.2959 |
 > MSE Reference: 0 = Lossless | <2 = Indistinguishable | <20 = Excellent | <65 = Acceptable
 
 | PSNR | TexInspect BC7 | TexConv BC7 | TexInspect BC1 | TexConv BC1 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Average** | 42.668 dB | 41.9745 dB | 34.255 dB | 35.3033 dB |
-| **Worst-Case** | 39.4583 | 38.0797 dB | 29.8485 dB | 31.3826 dB |
+| **Average** | 42.826 dB | 41.9745 dB | 35.2716 dB | 35.3033 dB |
+| **Worst-Case** | 39.6008 | 38.0797 dB | 30.979 dB | 31.3826 dB |
 > PSNR Reference: 128 = Lossless | >45 dB = Indistinguishable | >35 dB = Excellent | >30 dB = Acceptable
 
 | SSIM | TexInspect BC7 | TexConv BC7 | TexInspect BC1 | TexConv BC1 |
 | :--- | :--- | :--- | :--- | :--- |
-| **Average** | 0.9912 | 0.9923 | 0.9616 | 0.9608 |
-| **Worst-Case** | 0.9834 | 0.9879 | 0.9482 | 0.9476 |
+| **Average** | 0.9915 | 0.9923 | 0.9649 | 0.9608 |
+| **Worst-Case** | 0.9839 | 0.9879 | 0.9509 | 0.9476 |
 > SSIM Reference: 1.0 = Lossless | >0.98 = Indistinguishable | >0.95 = Excellent | >0.90 = Acceptable
 
 ## CLI Usage
