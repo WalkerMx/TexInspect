@@ -6,6 +6,8 @@ Imports System.Windows.Media.Media3D
 Partial Public Class MainWindow
     Inherits Window
 
+    Private Debug As Integer = 0
+
     Private FilePath As String
     Private TempPath As String
     Private FilePaths() As String
@@ -39,10 +41,14 @@ Partial Public Class MainWindow
         CubeTransform.Children.Add(New RotateTransform3D(CubeRotation))
         CubeTransform.Children.Add(CubeScaleTransform)
         Dim Args As String() = Environment.GetCommandLineArgs()
-        If Not (Args.Count > 1 AndAlso Args(1) = "-h") Then
-            Options = New ParallelOptions With {.MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1)}
-        Else
-            Me.Title = "TexInspect - All Cores Mode"
+        If Args.Count > 1 Then
+            For i = 1 To Args.Count - 1
+                If Args(i) = "-h" Then
+                    Me.Title &= " - All Cores Mode"
+                Else
+                    Options = New ParallelOptions With {.MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - 1)}
+                End If
+            Next
         End If
     End Sub
 
@@ -62,7 +68,7 @@ Partial Public Class MainWindow
                 If {".dds", ".png", ".jpg", ".jpeg", ".bmp"}.Contains(FileExt) Then
                     Await ProcessLoadedFileAsync(DroppedFiles(0))
                 Else
-                    MessageBox.Show($"Invali format: {FileExt}", "Error", MessageBoxButton.OK, MessageBoxImage.Information)
+                    MessageBox.Show($"Invalid format: {FileExt}", "Error", MessageBoxButton.OK, MessageBoxImage.Information)
                 End If
             End If
         Catch ex As Exception
@@ -76,7 +82,7 @@ Partial Public Class MainWindow
         End If
     End Sub
 
-    Public Sub UpdateOverrideFormats(sender As Object, e As RoutedEventArgs) Handles CompressionCheckBox.Checked, CompressionCheckBox.Unchecked, SmoothAlphaRB.Checked, SharpAlphaRB.Checked, NoAlphaRB.Checked, ExtendedHeaderCheckBox.Checked, ExtendedHeaderCheckBox.Unchecked, NormalCheckBox.Checked, NormalCheckBox.Unchecked
+    Public Sub UpdateOverrideFormats(sender As Object, e As RoutedEventArgs) Handles CompressionCheckBox.Checked, CompressionCheckBox.Unchecked, SmoothAlphaRB.Checked, SharpAlphaRB.Checked, NoAlphaRB.Checked, ExtendedHeaderCheckBox.Checked, ExtendedHeaderCheckBox.Unchecked, NormalCheckBox.Checked, NormalCheckBox.Unchecked, PreMultAlphaRB.Checked, PreMultAlphaRB.Unchecked
         If OverrideComboBox Is Nothing Then Return
         Dim IsDX10 As Boolean = ExtendedHeaderCheckBox.IsChecked = True
         Dim AlphaMode As Integer = GetAlphaMode()
@@ -258,9 +264,10 @@ Partial Public Class MainWindow
 
     Private Async Sub DecBenchButton_Click(sender As Object, e As RoutedEventArgs) Handles DecBenchButton.Click
         ToggleBusyState(True)
+        Dim FileExt As String = $".{OutputFormatComboBox.Text.ToString.ToLower}"
         Await RunBenchmarkAsync(Sub(FileName)
                                     Using Decoder As New DDS_Decoder(FileName)
-                                        Decoder.Save(Path.Combine(TempPath, "decoded.bmp"), ".bmp")
+                                        Decoder.Save(Path.Combine(TempPath, $"decoded{FileExt}"), FileExt)
                                     End Using
                                 End Sub)
         ToggleBusyState(False)

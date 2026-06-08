@@ -426,6 +426,26 @@ Public Class DDS_Decoder
         Next
     End Sub
 
+    Private Sub DecodeBlockBC1_Diagnostic(Offset As Integer, xPixelBase As Integer, yPixelBase As Integer, ActiveMode As Integer, ColorPalette() As Integer, Endpoints() As Integer)
+        Dim Col0 As UShort = BitConverter.ToUInt16(SourceBytes, Offset)
+        Dim Col1 As UShort = BitConverter.ToUInt16(SourceBytes, Offset + 2)
+        Dim DiagVal As Byte = 0
+        If ActiveMode >= 2 OrElse Col0 > Col1 Then
+            DiagVal = 255
+        End If
+        For i As Integer = 0 To 15
+            Dim pX As Integer = xPixelBase + (i And 3)
+            Dim pY As Integer = yPixelBase + (i >> 2)
+            If pX < Width AndAlso pY < Height Then
+                Dim destIdx As Integer = (pY * Width + pX) * 4
+                DecodedBytes(destIdx) = DiagVal
+                DecodedBytes(destIdx + 1) = DiagVal
+                DecodedBytes(destIdx + 2) = 255
+                DecodedBytes(destIdx + 3) = 255
+            End If
+        Next
+    End Sub
+
     Private Sub DecodeBlockBC1(Offset As Integer, xPixelBase As Integer, yPixelBase As Integer, ActiveMode As Integer, ColorPalette() As Integer, Endpoints() As Integer)
         Dim c0_raw As UShort = BitConverter.ToUInt16(SourceBytes, Offset)
         Dim c1_raw As UShort = BitConverter.ToUInt16(SourceBytes, Offset + 2)

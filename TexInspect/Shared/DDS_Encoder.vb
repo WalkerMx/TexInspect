@@ -402,7 +402,7 @@ Public Class DDS_Encoder
                                                               EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF)
                                                           Case 1 ' BC1a
                                                               Dim AlphaMask As UShort = 0
-                                                              EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset + 8, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF, AlphaMask)
+                                                              EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF, AlphaMask)
                                                               If HasAlpha AndAlso AlphaMask > 0 Then
                                                                   EncodeBlockBC1a(Result, currentBlockOffset, BufferA, AlphaMask)
                                                               End If
@@ -422,7 +422,7 @@ Public Class DDS_Encoder
                                                           Case 30 ' DXT5n
                                                               EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 2, Result, currentBlockOffset, BufferA)
                                                               EncodeBlockBC1n(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset + 8, BufferA, 1)
-                                                          Case 70 ' BC7n (Dynamic Mode 4)
+                                                          Case 70 ' BC7n (Dynamic Mode 4, 5)
                                                               EncodeBlockBC7n(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF)
                                                       End Select
                                                   Next
@@ -498,7 +498,6 @@ Public Class DDS_Encoder
         Dim SumB As Integer = 0, SumSquareB As Integer = 0
         Dim SumG As Integer = 0, SumSquareG As Integer = 0
         Dim SumR As Integer = 0, SumSquareR As Integer = 0
-        Dim SumA As Integer = 0, SumSquareA As Integer = 0
         Dim MinLumIndex As Integer = 0, MaxLumIndex As Integer = 0
         Dim MinLum As Integer = 1000, MaxLum As Integer = -1
         Dim WidthBound As Integer = Width - 1
@@ -523,7 +522,6 @@ Public Class DDS_Encoder
                 SumB += ValB : SumSquareB += (ValB * ValB)
                 SumG += ValG : SumSquareG += (ValG * ValG)
                 SumR += ValR : SumSquareR += (ValR * ValR)
-                SumA += ValA : SumSquareA += (ValA * ValA)
                 If ValA < MinA Then MinA = ValA
                 If ValA > MaxA Then MaxA = ValA
                 Dim Lum As Integer = ValR + ValG + ValB
@@ -545,10 +543,12 @@ Public Class DDS_Encoder
         Dim VarR As Integer = (SumSquareR << 4) - (SumR * SumR)
         Dim VarG As Integer = (SumSquareG << 4) - (SumG * SumG)
         Dim VarB As Integer = (SumSquareB << 4) - (SumB * SumB)
-        Dim VarA As Integer = (SumSquareA << 4) - (SumA * SumA)
         Dim MaxVar As Integer = VarR
+        Dim MinVar As Integer = VarR
         If VarG > MaxVar Then MaxVar = VarG
         If VarB > MaxVar Then MaxVar = VarB
+        If VarG < MaxVar Then MinVar = VarG
+        If VarB < MaxVar Then MinVar = VarB
         Dim VarThreshold As Integer = 27750
         Dim UseMode1_7 As Boolean = False
         Dim PBits As Integer = 0
@@ -842,12 +842,9 @@ Public Class DDS_Encoder
         Next
         Dim dummyPBits As Integer = 0
         GetEndpointsPCA(0, 0, LocalR, LocalG, LocalB, LocalA, 0, 3, 0, Endpoints, 0, Indices, dummyPBits)
-        Dim ep0R As Integer = Endpoints(0)
-        Dim ep1R As Integer = Endpoints(1)
-        Dim ep0G As Integer = Endpoints(2)
-        Dim ep1G As Integer = Endpoints(3)
-        Dim ep0B As Integer = Endpoints(4)
-        Dim ep1B As Integer = Endpoints(5)
+        Dim ep0R As Integer = Endpoints(0) : Dim ep1R As Integer = Endpoints(1)
+        Dim ep0G As Integer = Endpoints(2) : Dim ep1G As Integer = Endpoints(3)
+        Dim ep0B As Integer = Endpoints(4) : Dim ep1B As Integer = Endpoints(5)
         Dim rangeR As Integer = ep1R - ep0R
         Dim rangeG As Integer = ep1G - ep0G
         Dim rangeB As Integer = ep1B - ep0B
@@ -864,15 +861,10 @@ Public Class DDS_Encoder
         Dim Col1 As UShort = CUShort(((ep1R And &HF8) << 8) Or ((ep1G And &HFC) << 3) Or (ep1B >> 3))
         If Col0 < Col1 Then
             Dim temp As UShort = Col0 : Col0 = Col1 : Col1 = temp
-        ElseIf Col0 = Col1 Then
-            If Col0 > 0 Then Col1 -= 1US Else Col0 += 1US
         End If
-        Dim R0 As Integer = (Col0 >> 8) And &HF8 : R0 = R0 Or (R0 >> 5)
-        Dim G0 As Integer = (Col0 >> 3) And &HFC : G0 = G0 Or (G0 >> 6)
-        Dim B0 As Integer = (Col0 << 3) And &HF8 : B0 = B0 Or (B0 >> 5)
-        Dim R1 As Integer = (Col1 >> 8) And &HF8 : R1 = R1 Or (R1 >> 5)
-        Dim G1 As Integer = (Col1 >> 3) And &HFC : G1 = G1 Or (G1 >> 6)
-        Dim B1 As Integer = (Col1 << 3) And &HF8 : B1 = B1 Or (B1 >> 5)
+        Dim R0 As Integer = (Col0 >> 8) And &HF8 : R0 = R0 Or (R0 >> 5) : Dim R1 As Integer = (Col1 >> 8) And &HF8 : R1 = R1 Or (R1 >> 5)
+        Dim G0 As Integer = (Col0 >> 3) And &HFC : G0 = G0 Or (G0 >> 6) : Dim G1 As Integer = (Col1 >> 3) And &HFC : G1 = G1 Or (G1 >> 6)
+        Dim B0 As Integer = (Col0 << 3) And &HF8 : B0 = B0 Or (B0 >> 5) : Dim B1 As Integer = (Col1 << 3) And &HF8 : B1 = B1 Or (B1 >> 5)
         Dim R2_4 As Integer = (2 * R0 + R1 + 1) \ 3 : Dim G2_4 As Integer = (2 * G0 + G1 + 1) \ 3 : Dim B2_4 As Integer = (2 * B0 + B1 + 1) \ 3
         Dim R3_4 As Integer = (R0 + 2 * R1 + 1) \ 3 : Dim G3_4 As Integer = (G0 + 2 * G1 + 1) \ 3 : Dim B3_4 As Integer = (B0 + 2 * B1 + 1) \ 3
         Dim R2_3 As Integer = (R0 + R1) \ 2 : Dim G2_3 As Integer = (G0 + G1) \ 2 : Dim B2_3 As Integer = (B0 + B1) \ 2

@@ -14,5 +14,5 @@ Imports System.Windows
 <Assembly: ComVisible(False)>
 <Assembly: ThemeInfo(ResourceDictionaryLocation.None, ResourceDictionaryLocation.SourceAssembly)>
 <Assembly: Guid("0a961f2e-8b38-40a4-b393-74aaaffd33c8")>
-<Assembly: AssemblyVersion("1.3.3.0")>
-<Assembly: AssemblyFileVersion("1.3.3.0")>
+<Assembly: AssemblyVersion("1.3.5.0")>
+<Assembly: AssemblyFileVersion("1.3.5.0")>
