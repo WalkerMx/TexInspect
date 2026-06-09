@@ -1,5 +1,5 @@
 # TexInspect DDS Encoder/Decoder (VB.NET)
-A lightweight, fully managed DDS encoder and decoder. TexInspect is a zero-dependency application for handling 2D DirectDraw Surface textures.
+A lightweight, high-quality DDS encoder and decoder. TexInspect is a zero-dependency application for handling LDR DirectDraw Surfaces.
 
 ![](https://github.com/WalkerMx/DemoImages/blob/032c8a250d69e3aefb59c09a61cd6d7de76c1e6f/TexInspect/v1.3.1.PNG)
 
@@ -8,12 +8,11 @@ A lightweight, fully managed DDS encoder and decoder. TexInspect is a zero-depen
 * **Compatibility:** Only requires .NET 4.7.2, no extra redistributables.  Compatible with Windows 7 SP1 - 11.
 * **Full LDR Support:** Supports encoding and decoding BC1-5, Legacy DXT1-5, ATI1, ATI2, and BC7.
 * **MipMaps:** Automated chain generation using Catmull-Rom downsampling.
-* **CubeMaps:** Automated decoding and saving of CubeMap arrays.
+* **CubeMaps:** Automated detection, encoding, and decoding CubeMaps with full 3D preview (GUI only).
 * **Normal Maps:** Specialized alternative encoders for Normal Maps using DXT5n or BC7n.
 * **Quality Analysis:** Supports assessing MSE, PSNR, and SSIM.
 * **Headers:** Supports Legacy FourCC and modern DX10 (DXGI_Format) extended headers.
 * **Reporting:** Capable of reading and validating DDS headers, and generating full reports.
-* **3D CubeMap Previews:** Full 3D previewing of CubeMaps with rotation (GUI Only).
 
 ## System Requirements
 ### Minimum
@@ -31,7 +30,7 @@ A lightweight, fully managed DDS encoder and decoder. TexInspect is a zero-depen
 > GPU requirements are recommended minimums for the OS.  TexInspect is GPU-agnostic.
 
 ## Performance
-Comparison testing was done on a i9-9980HK (2019), strictly on the CPU.  Results are taken from a 50-run average.  While encoding, Texconv was run in 'Quick' mode.  Decoding was benchmarked while exporting to BMP.
+Comparison testing was done on a i9-9980HK (2019), strictly on the CPU.  Results are taken from a 50-run average.  While encoding BC7, Texconv was run in 'Quick' mode.  Decoding was benchmarked while exporting to BMP.
 
 ### Encoding
 | | TexInspect 4K | TexConv 4K | Delta |
