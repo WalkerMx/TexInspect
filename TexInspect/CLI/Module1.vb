@@ -434,7 +434,7 @@ Public Module Module1
         Console.WriteLine("  --info                         Show header info for the target file(s) without processing")
         Console.WriteLine("  -q, --quality <path>           Compare input to reference path and print average MSE, PSNR, & SSIM")
         Console.WriteLine("  -qv, --qualityverbose <path>   Compare input to reference path and print average & per-channel metrics")
-        Console.WriteLine("  -t,                            Output elapsed time for the operation")
+        Console.WriteLine("  -t                             Output elapsed time for the operation")
         Console.WriteLine()
         Console.WriteLine("Examples:")
         Console.WriteLine("  Encode PNG to BC7 DDS:")

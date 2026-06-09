@@ -410,17 +410,17 @@ Public Class DDS_Encoder
                                                               EncodeBlockBC2(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset)
                                                               EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset + 8, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF)
                                                           Case 3 ' BC3
-                                                              EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 3, Result, currentBlockOffset, BufferA)
+                                                              EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 3, Result, currentBlockOffset, BufferA, BufferB, BufferC)
                                                               EncodeBlockBC1(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset + 8, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF)
                                                           Case 4 ' BC4
-                                                              EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 2, Result, currentBlockOffset, BufferA)
+                                                              EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 2, Result, currentBlockOffset, BufferA, BufferB, BufferC)
                                                           Case 5 ' BC5
-                                                              EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 2, Result, currentBlockOffset, BufferA)
-                                                              EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 1, Result, currentBlockOffset + 8, BufferB)
+                                                              EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 2, Result, currentBlockOffset, BufferA, BufferB, BufferC)
+                                                              EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 1, Result, currentBlockOffset + 8, BufferA, BufferB, BufferC)
                                                           Case 7 ' BC7 (Dynamic Mode 1, 6, 7)
                                                               EncodeBlockBC7(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF)
                                                           Case 30 ' DXT5n
-                                                              EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 2, Result, currentBlockOffset, BufferA)
+                                                              EncodeBlockBC3(SourceData, xPixelBase, yPixelBase, Width, Height, 2, Result, currentBlockOffset, BufferA, BufferB, BufferC)
                                                               EncodeBlockBC1n(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset + 8, BufferA, 1)
                                                           Case 70 ' BC7n (Dynamic Mode 4, 5)
                                                               EncodeBlockBC7n(SourceData, xPixelBase, yPixelBase, Width, Height, Result, currentBlockOffset, BufferA, BufferB, BufferC, BufferD, BufferE, BufferF)
@@ -544,11 +544,8 @@ Public Class DDS_Encoder
         Dim VarG As Integer = (SumSquareG << 4) - (SumG * SumG)
         Dim VarB As Integer = (SumSquareB << 4) - (SumB * SumB)
         Dim MaxVar As Integer = VarR
-        Dim MinVar As Integer = VarR
         If VarG > MaxVar Then MaxVar = VarG
         If VarB > MaxVar Then MaxVar = VarB
-        If VarG < MaxVar Then MinVar = VarG
-        If VarB < MaxVar Then MinVar = VarB
         Dim VarThreshold As Integer = 27750
         Dim UseMode1_7 As Boolean = False
         Dim PBits As Integer = 0
@@ -629,7 +626,11 @@ Public Class DDS_Encoder
         EncodeMode6(Endpoints, Indices, Result, OutputOffset, PBits)
     End Sub
 
-    Private Sub EncodeBlockBC3(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, ChannelOffset As Integer, Result As Byte(), OutputOffset As Integer, ChannelArray() As Integer)
+    Private Sub EncodeBlockBC3(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, ChannelOffset As Integer, Result As Byte(), OutputOffset As Integer, ChannelArray() As Integer, Endpoints() As Integer, Indices() As Integer)
+        Dim minVal As Integer = 255
+        Dim maxVal As Integer = 0
+        Dim minRemaining As Integer = 255
+        Dim maxRemaining As Integer = 0
         Dim idx As Integer = 0
         For j As Integer = 0 To 3
             Dim py As Integer = Math.Min(yPixelBase + j, Height - 1)
@@ -637,56 +638,76 @@ Public Class DDS_Encoder
             For i As Integer = 0 To 3
                 Dim px As Integer = Math.Min(xPixelBase + i, Width - 1)
                 Dim pixelIdx As Integer = rowInputOffset + (px * 4)
-                ChannelArray(idx) = SourceData(pixelIdx + ChannelOffset)
+                Dim v As Integer = SourceData(pixelIdx + ChannelOffset)
+                ChannelArray(idx) = v
+                If v < minVal Then minVal = v
+                If v > maxVal Then maxVal = v
+                If v > 0 AndAlso v < minRemaining Then minRemaining = v
+                If v < 255 AndAlso v > maxRemaining Then maxRemaining = v
                 idx += 1
             Next
         Next
-        Dim Val0 As Byte = 0
-        Dim Val1 As Byte = 255
-        For i As Integer = 0 To 15
-            Dim LocalTemp As Byte = ChannelArray(i)
-            If LocalTemp > Val0 Then Val0 = LocalTemp
-            If LocalTemp < Val1 Then Val1 = LocalTemp
-        Next
-        If Val0 = Val1 Then
-            If Val0 > 0 Then
-                Val1 -= 1
-            Else
-                Val0 += 1
+        Dim useModeB As Boolean = (minVal = 0 AndAlso maxVal = 255 AndAlso maxRemaining >= minRemaining AndAlso (maxRemaining - minRemaining) <= 182)
+        Dim Val0 As Byte
+        Dim Val1 As Byte
+        If useModeB Then
+            GetEndpoints1D(ChannelArray, 8, 0, Endpoints, 0, Indices, minRemaining, maxRemaining)
+            Val0 = CByte(Endpoints(0))
+            Val1 = CByte(Endpoints(1))
+            If Val0 = Val1 Then
+                If Val0 > 0 Then Val0 -= 1 Else Val1 += 1
+            End If
+        Else
+            GetEndpoints1D(ChannelArray, 8, 0, Endpoints, 0, Indices, minVal, maxVal)
+            Val0 = CByte(Endpoints(1))
+            Val1 = CByte(Endpoints(0))
+            If Val0 = Val1 Then
+                If Val0 > 0 Then Val1 -= 1 Else Val0 += 1
             End If
         End If
         Result(OutputOffset) = Val0
         Result(OutputOffset + 1) = Val1
         Dim BitBuffer As Long = 0
-        Dim BitsLoaded As Integer = 0
-        Dim ByteOffset As Integer = OutputOffset + 2
-        Dim Range As Integer = CInt(Val0) - Val1
+        Dim Intervals As Integer = If(useModeB, 5, 7)
+        Dim Diff As Integer = CInt(Val0) - Val1
+        Dim Mask As Integer = Diff >> 31
+        Dim Range As Integer = (Diff Xor Mask) - Mask
+        Dim HalfRange As Integer = Range \ 2
         For i As Integer = 0 To 15
             Dim v As Integer = ChannelArray(i)
-            Dim Index As Byte
-            If v >= Val0 Then
-                Index = 0
-            ElseIf v <= Val1 Then
-                Index = 1
+            Dim Index As Long
+            If useModeB AndAlso v = 0 Then
+                Index = 6
+            ElseIf useModeB AndAlso v = 255 Then
+                Index = 7
             Else
-                Dim stepCount As Integer = ((CInt(Val0) - v) * 7 + (Range \ 2)) \ Range
-                If stepCount <= 0 Then
+                Diff = v - CInt(Val0)
+                Mask = Diff >> 31
+                Dim distance As Integer = (Diff Xor Mask) - Mask
+                If distance <= 0 Then
                     Index = 0
-                ElseIf stepCount >= 7 Then
+                ElseIf distance >= Range Then
                     Index = 1
                 Else
-                    Index = CByte(stepCount + 1)
+                    Dim stepCount As Integer = (distance * Intervals + HalfRange) \ Range
+                    If stepCount <= 0 Then
+                        Index = 0
+                    ElseIf stepCount >= Intervals Then
+                        Index = 1
+                    Else
+                        Index = stepCount + 1
+                    End If
                 End If
             End If
-            BitBuffer = BitBuffer Or (CLng(Index) << BitsLoaded)
-            BitsLoaded += 3
-            While BitsLoaded >= 8
-                Result(ByteOffset) = CByte(BitBuffer And &HFF)
-                BitBuffer >>= 8
-                BitsLoaded -= 8
-                ByteOffset += 1
-            End While
+            BitBuffer = BitBuffer Or (Index << (i * 3))
         Next
+        Dim ByteOffset As Integer = OutputOffset + 2
+        Result(ByteOffset) = CByte(BitBuffer And &HFF)
+        Result(ByteOffset + 1) = CByte((BitBuffer >> 8) And &HFF)
+        Result(ByteOffset + 2) = CByte((BitBuffer >> 16) And &HFF)
+        Result(ByteOffset + 3) = CByte((BitBuffer >> 24) And &HFF)
+        Result(ByteOffset + 4) = CByte((BitBuffer >> 32) And &HFF)
+        Result(ByteOffset + 5) = CByte((BitBuffer >> 40) And &HFF)
     End Sub
 
     Private Sub EncodeBlockBC2(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, Result As Byte(), OutputOffset As Integer)
@@ -841,7 +862,7 @@ Public Class DDS_Encoder
             Next
         Next
         Dim dummyPBits As Integer = 0
-        GetEndpointsPCA(0, 0, LocalR, LocalG, LocalB, LocalA, 0, 3, 0, Endpoints, 0, Indices, dummyPBits)
+        GetEndpointsPCA(0, 0, LocalR, LocalG, LocalB, LocalA, 0, 0, 0, Endpoints, 0, Indices, dummyPBits)
         Dim ep0R As Integer = Endpoints(0) : Dim ep1R As Integer = Endpoints(1)
         Dim ep0G As Integer = Endpoints(2) : Dim ep1G As Integer = Endpoints(3)
         Dim ep0B As Integer = Endpoints(4) : Dim ep1B As Integer = Endpoints(5)
@@ -1236,22 +1257,14 @@ Public Class DDS_Encoder
         minProj -= meanProj
         maxProj -= meanProj
         If minProj = maxProj Then minProj -= 1.0F : maxProj += 1.0F
-        Dim ep0R As Integer = CInt(meanR + vR * minProj)
-        If ep0R < 0 Then ep0R = 0 Else If ep0R > 255 Then ep0R = 255
-        Dim ep1R As Integer = CInt(meanR + vR * maxProj)
-        If ep1R < 0 Then ep1R = 0 Else If ep1R > 255 Then ep1R = 255
-        Dim ep0G As Integer = CInt(meanG + vG * minProj)
-        If ep0G < 0 Then ep0G = 0 Else If ep0G > 255 Then ep0G = 255
-        Dim ep1G As Integer = CInt(meanG + vG * maxProj)
-        If ep1G < 0 Then ep1G = 0 Else If ep1G > 255 Then ep1G = 255
-        Dim ep0B As Integer = CInt(meanB + vB * minProj)
-        If ep0B < 0 Then ep0B = 0 Else If ep0B > 255 Then ep0B = 255
-        Dim ep1B As Integer = CInt(meanB + vB * maxProj)
-        If ep1B < 0 Then ep1B = 0 Else If ep1B > 255 Then ep1B = 255
-        Dim ep0A As Integer = CInt(meanA + vA * minProj)
-        If ep0A < 0 Then ep0A = 0 Else If ep0A > 255 Then ep0A = 255
-        Dim ep1A As Integer = CInt(meanA + vA * maxProj)
-        If ep1A < 0 Then ep1A = 0 Else If ep1A > 255 Then ep1A = 255
+        Dim ep0R As Integer = Math.Min(255, Math.Max(0, CInt(meanR + vR * minProj)))
+        Dim ep1R As Integer = Math.Min(255, Math.Max(0, CInt(meanR + vR * maxProj)))
+        Dim ep0G As Integer = Math.Min(255, Math.Max(0, CInt(meanG + vG * minProj)))
+        Dim ep1G As Integer = Math.Min(255, Math.Max(0, CInt(meanG + vG * maxProj)))
+        Dim ep0B As Integer = Math.Min(255, Math.Max(0, CInt(meanB + vB * minProj)))
+        Dim ep1B As Integer = Math.Min(255, Math.Max(0, CInt(meanB + vB * maxProj)))
+        Dim ep0A As Integer = Math.Min(255, Math.Max(0, CInt(meanA + vA * minProj)))
+        Dim ep1A As Integer = Math.Min(255, Math.Max(0, CInt(meanA + vA * maxProj)))
         Dim p0 As Integer = (ep0G >> (endpointShift - 1)) And 1
         Dim p1 As Integer = (ep1G >> (endpointShift - 1)) And 1
         PBits = (PBits << 2) Or (p0 << 1) Or p1
@@ -1259,6 +1272,7 @@ Public Class DDS_Encoder
         Endpoints(epOffset + 2) = ep0G >> endpointShift : Endpoints(epOffset + 3) = ep1G >> endpointShift
         Endpoints(epOffset + 4) = ep0B >> endpointShift : Endpoints(epOffset + 5) = ep1B >> endpointShift
         Endpoints(epOffset + 6) = ep0A >> endpointShift : Endpoints(epOffset + 7) = ep1A >> endpointShift
+        If indexMax = 0 Then Return
         Dim dirR As Integer = ep1R - ep0R
         Dim dirG As Integer = ep1G - ep0G
         Dim dirB As Integer = ep1B - ep0B
@@ -1289,8 +1303,17 @@ Public Class DDS_Encoder
             Next
             Return
         End If
-        Dim ep0 As Integer = (minVal * maxQuant + 127) \ 255
-        Dim ep1 As Integer = (maxVal * maxQuant + 127) \ 255
+        If IndexBits = 0 Then
+            Endpoints(epOffset + 0) = (minVal * maxQuant + 127) \ 255
+            Endpoints(epOffset + 1) = (maxVal * maxQuant + 127) \ 255
+            Return
+        End If
+        Dim valRange As Integer = maxVal - minVal
+        Dim inset As Integer = valRange >> 4
+        Dim insetMin As Integer = minVal + inset
+        Dim insetMax As Integer = maxVal - inset
+        Dim ep0 As Integer = (insetMin * maxQuant + 127) \ 255
+        Dim ep1 As Integer = (insetMax * maxQuant + 127) \ 255
         Endpoints(epOffset + 0) = ep0
         Endpoints(epOffset + 1) = ep1
         Dim shift As Integer = 8 - EndpointBits
