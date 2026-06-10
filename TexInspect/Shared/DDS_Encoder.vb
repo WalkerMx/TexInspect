@@ -366,7 +366,8 @@ Public Class DDS_Encoder
         End If
     End Function
 
-    Private Function WriteUncompressed(SourceData As Byte(), Alpha As Boolean) As Byte()
+    Private Function WriteUncompressed(SourceData As Byte(), Alpha As Boolean) As Byte(
+                                                                                      )
         If Alpha Then
             If MipCount > 1 Then
                 Return DirectCast(SourceData.Clone(), Byte())
@@ -627,8 +628,8 @@ Public Class DDS_Encoder
     End Sub
 
     Private Sub EncodeBlockBC3(SourceData As Byte(), xPixelBase As Integer, yPixelBase As Integer, Width As Integer, Height As Integer, ChannelOffset As Integer, Result As Byte(), OutputOffset As Integer, ChannelArray() As Integer, Endpoints() As Integer, Indices() As Integer)
-        Dim minVal As Integer = 255
-        Dim maxVal As Integer = 0
+        Dim minVal As Integer = 255 : Dim maxVal As Integer = 0
+        Dim sumV As Integer = 0 : Dim sumSqV As Integer = 0
         Dim minRemaining As Integer = 255
         Dim maxRemaining As Integer = 0
         Dim idx As Integer = 0
@@ -644,10 +645,22 @@ Public Class DDS_Encoder
                 If v > maxVal Then maxVal = v
                 If v > 0 AndAlso v < minRemaining Then minRemaining = v
                 If v < 255 AndAlso v > maxRemaining Then maxRemaining = v
+                sumV += v : sumSqV += (v * v)
                 idx += 1
             Next
         Next
-        Dim useModeB As Boolean = (minVal = 0 AndAlso maxVal = 255 AndAlso maxRemaining >= minRemaining AndAlso (maxRemaining - minRemaining) <= 182)
+        Dim var As Integer = ((sumSqV << 4) - (sumV * sumV))
+
+        Dim useModeB As Boolean = False
+
+        If minVal = 0 AndAlso maxVal = 255 AndAlso maxRemaining >= minRemaining AndAlso (maxRemaining - minRemaining) <= 182 Then
+            useModeB = True
+        ElseIf var < 1500 Then
+            useModeB = True
+            minRemaining = minVal
+            maxRemaining = maxVal
+        End If
+
         Dim Val0 As Byte
         Dim Val1 As Byte
         If useModeB Then
@@ -1003,6 +1016,101 @@ Public Class DDS_Encoder
             Dim bits As Integer = If(i = anchor0 OrElse i = anchor1, 1, 2)
             HighBytes = HighBytes Or (CULng(Indices(i)) << bitOffset)
             bitOffset += bits
+        Next
+        For i As Integer = 0 To 7
+            Result(OutputOffset + i) = CByte((LowBytes >> (i << 3)) And &HFFUL)
+            Result(OutputOffset + 8 + i) = CByte((HighBytes >> (i << 3)) And &HFFUL)
+        Next
+    End Sub
+
+    Private Sub EncodeMode6n(Blue As Integer, Green As Integer, Red As Integer, Alpha As Integer, Result As Byte(), OutputOffset As Integer, best_ep As Integer(), temp_ep As Integer(), targets As Integer())
+        Dim best_p0 As ULong = 0
+        Dim best_p1 As ULong = 0
+        Dim best_idx As Integer = 0
+        Dim found As Boolean = False
+        If (Red And 1) = 1 AndAlso (Green And 1) = 1 Then
+            best_p0 = 0
+            best_p1 = 1
+            best_ep(0) = 0 : best_ep(1) = Red >> 1
+            best_ep(2) = 0 : best_ep(3) = Green >> 1
+            best_ep(4) = 0 : best_ep(5) = 127
+            best_ep(6) = 0 : best_ep(7) = 127
+            best_idx = 15
+            found = True
+        End If
+        If Not found Then
+            targets(0) = Red
+            targets(1) = Green
+            targets(2) = Blue
+            targets(3) = Alpha
+            Dim min_error As Integer = Integer.MaxValue
+            Dim p0 As Integer = 0
+            Dim p1 As Integer = 1
+            For idx As Integer = 0 To 15
+                Dim w1 As Integer = Weight4(idx)
+                Dim w0 As Integer = 64 - w1
+                Dim current_error As Integer = 0
+                For ch As Integer = 0 To 3
+                    Dim target As Integer = targets(ch)
+                    Dim best_ch_err As Integer = Integer.MaxValue
+                    Dim center As Integer = target >> 1
+                    Dim min_e As Integer = Math.Max(0, center - 8)
+                    Dim max_e As Integer = Math.Min(127, center + 8)
+                    For e0 As Integer = min_e To max_e
+                        Dim v0 As Integer = (e0 << 1) Or p0
+                        For e1 As Integer = min_e To max_e
+                            Dim v1 As Integer = (e1 << 1) Or p1
+                            Dim interp As Integer = ((v0 * w0) + (v1 * w1) + 32) >> 6
+                            Dim err As Integer = Math.Abs(interp - target)
+                            If err < best_ch_err Then
+                                best_ch_err = err
+                                temp_ep(ch * 2) = e0
+                                temp_ep(ch * 2 + 1) = e1
+                                If err = 0 Then Exit For
+                            End If
+                        Next
+                        If best_ch_err = 0 Then Exit For
+                    Next
+                    current_error += best_ch_err
+                    If current_error >= min_error Then Exit For
+                Next
+                If current_error < min_error Then
+                    min_error = current_error
+                    For i As Integer = 0 To 7
+                        best_ep(i) = temp_ep(i)
+                    Next
+                    best_p0 = CULng(p0)
+                    best_p1 = CULng(p1)
+                    best_idx = idx
+                    If min_error = 0 Then
+                        Exit For
+                    End If
+                End If
+            Next
+        End If
+        If best_idx >= 8 Then
+            Dim t As Integer
+            t = best_ep(0) : best_ep(0) = best_ep(1) : best_ep(1) = t
+            t = best_ep(2) : best_ep(2) = best_ep(3) : best_ep(3) = t
+            t = best_ep(4) : best_ep(4) = best_ep(5) : best_ep(5) = t
+            t = best_ep(6) : best_ep(6) = best_ep(7) : best_ep(7) = t
+            Dim pTemp As ULong = best_p0 : best_p0 = best_p1 : best_p1 = pTemp
+            best_idx = 15 - best_idx
+        End If
+        Dim LowBytes As ULong = &H40UL
+        LowBytes = LowBytes Or (CULng(best_ep(0)) << 7)
+        LowBytes = LowBytes Or (CULng(best_ep(1)) << 14)
+        LowBytes = LowBytes Or (CULng(best_ep(2)) << 21)
+        LowBytes = LowBytes Or (CULng(best_ep(3)) << 28)
+        LowBytes = LowBytes Or (CULng(best_ep(4)) << 35)
+        LowBytes = LowBytes Or (CULng(best_ep(5)) << 42)
+        LowBytes = LowBytes Or (CULng(best_ep(6)) << 49)
+        LowBytes = LowBytes Or (CULng(best_ep(7)) << 56)
+        LowBytes = LowBytes Or (best_p0 << 63)
+        Dim HighBytes As ULong = best_p1
+        HighBytes = HighBytes Or ((CULng(best_idx) And 7UL) << 1)
+        For i As Integer = 1 To 15
+            HighBytes = HighBytes Or ((CULng(best_idx) And 15UL) << (i * 4))
         Next
         For i As Integer = 0 To 7
             Result(OutputOffset + i) = CByte((LowBytes >> (i << 3)) And &HFFUL)

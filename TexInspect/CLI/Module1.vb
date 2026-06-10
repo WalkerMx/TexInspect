@@ -20,6 +20,7 @@ Public Module Module1
         Public TargetImgExt As String = ".png"
         Public ReferencePath As String = ""
         Public Verbose As Boolean = False
+        Public Normal As Boolean = False
         Public IsCube As Boolean = False
         Public BenchEnabled As Boolean
     End Class
@@ -105,6 +106,12 @@ Public Module Module1
                     End If
                 Case "-qv", "--qualityverbose"
                     Opts.Verbose = True
+                    If i + 1 < args.Length Then
+                        Opts.ReferencePath = args(i + 1)
+                        i += 1
+                    End If
+                Case "-qn", "--qualitynormal"
+                    Opts.Normal = True
                     If i + 1 < args.Length Then
                         Opts.ReferencePath = args(i + 1)
                         i += 1
@@ -291,16 +298,22 @@ Public Module Module1
         Try
             Dim BmpSource As BitmapSource = LoadBitmapForMetrics(Source)
             Dim BmpReference As BitmapSource = LoadBitmapForMetrics(Reference)
-            Using Metrics As New ImageMetrics(BmpSource, BmpReference)
+            Using Metrics As New ImageMetrics(BmpSource, BmpReference, Not CliOpts.Normal)
                 Metrics.CalcAll()
-                Console.WriteLine($"{Path.GetFileName(Source)} <-> {Path.GetFileName(Reference)} | MSE: {Metrics.MSE.Average:F4} | PSNR: {Metrics.PSNR.Average:F4} dB | SSIM: {Metrics.SSIM.Average:F4}")
+                If CliOpts.Normal Then
+                    Console.WriteLine($"{Path.GetFileName(Source)} <-> {Path.GetFileName(Reference)} | Mean Angular Error: {Metrics.MAE:F4} dB | Mean Cosine Similarity: {Metrics.MCS:F4}")
+                    Console.WriteLine($"    Red   | MSE:{Metrics.MSE.R:F4} | PSNR:{Metrics.PSNR.R:F4} dB | SSIM:{Metrics.SSIM.R:F4}")
+                    Console.WriteLine($"    Green | MSE:{Metrics.MSE.G:F4} | PSNR:{Metrics.PSNR.G:F4} dB | SSIM:{Metrics.SSIM.G:F4}")
+                Else
+                    Console.WriteLine($"{Path.GetFileName(Source)} <-> {Path.GetFileName(Reference)} | MSE: {Metrics.MSE.Average:F4} | PSNR: {Metrics.PSNR.Average:F4} dB | SSIM: {Metrics.SSIM.Average:F4}")
+                End If
                 If CliOpts.Verbose Then
                     Console.WriteLine($"    Red   | MSE:{Metrics.MSE.R:F4} | PSNR:{Metrics.PSNR.R:F4} dB | SSIM:{Metrics.SSIM.R:F4}")
                     Console.WriteLine($"    Green | MSE:{Metrics.MSE.G:F4} | PSNR:{Metrics.PSNR.G:F4} dB | SSIM:{Metrics.SSIM.G:F4}")
                     Console.WriteLine($"    Blue  | MSE:{Metrics.MSE.B:F4} | PSNR:{Metrics.PSNR.B:F4} dB | SSIM:{Metrics.SSIM.B:F4}")
                     Console.WriteLine($"    Alpha | MSE:{Metrics.MSE.A:F4} | PSNR:{Metrics.PSNR.A:F4} dB | SSIM:{Metrics.SSIM.A:F4}")
                     Console.WriteLine()
-                End If
+                    End If
             End Using
         Catch ex As Exception
             Console.WriteLine($"[FAILED]: {ex.Message}")
@@ -434,6 +447,7 @@ Public Module Module1
         Console.WriteLine("  --info                         Show header info for the target file(s) without processing")
         Console.WriteLine("  -q, --quality <path>           Compare input to reference path and print average MSE, PSNR, & SSIM")
         Console.WriteLine("  -qv, --qualityverbose <path>   Compare input to reference path and print average & per-channel metrics")
+        Console.WriteLine("  -qn, --qualitynormal <path>    Compare input to reference path and print MAE, MCS, and red and green channel metrics")
         Console.WriteLine("  -t                             Output elapsed time for the operation")
         Console.WriteLine()
         Console.WriteLine("Examples:")

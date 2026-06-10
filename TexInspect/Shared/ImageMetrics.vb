@@ -6,6 +6,8 @@
     Public Property MSE As ChannelMetric
     Public Property PSNR As ChannelMetric
     Public Property SSIM As ChannelMetric
+    Public Property MAE As Double
+    Public Property MCS As Double
 
     Private ImageBytes1 As Byte()
     Private ImageBytes2 As Byte()
@@ -16,6 +18,7 @@
 
     Private MSE_Done As Boolean = False
     Private SSIM_Done As Boolean = False
+    Private MAE_Done As Boolean = False
 
     Private Const C1 As Double = 6.5025
     Private Const C2 As Double = 58.5225
@@ -30,13 +33,15 @@
         Public Average As Double
     End Structure
 
-    Public Sub New(ImagePath1 As String, ImagePath2 As String)
+    Public Sub New(ImagePath1 As String, ImagePath2 As String, Optional SkipNormal As Boolean = True)
         Dim Image1 As BitmapSource = LoadBitmapSource(ImagePath1)
         Dim Image2 As BitmapSource = LoadBitmapSource(ImagePath2)
+        MAE_Done = SkipNormal
         Initialize(Image1, Image2)
     End Sub
 
-    Public Sub New(Image1 As BitmapSource, Image2 As BitmapSource)
+    Public Sub New(Image1 As BitmapSource, Image2 As BitmapSource, Optional SkipNormal As Boolean = True)
+        MAE_Done = SkipNormal
         Initialize(Image1, Image2)
     End Sub
 
@@ -72,59 +77,56 @@
     Public Sub CalcAll()
         CalcMSE_PSNR()
         CalcSSIM()
+        CalcMAE_MCS()
     End Sub
 
     Private Sub CalcMSE_PSNR()
-        If Not MSE_Done Then
-            Dim ErrorSums(3) As Double
-            Dim TempLock As New Object()
-            Parallel.For(0, Height,
-            Function() As Double()
-                If BufferA Is Nothing Then BufferA = New Double(3) {}
-                Array.Clear(BufferA, 0, 4)
-                Return BufferA
-            End Function,
-            Function(y, LoopState, LocalErrorSums)
-                Dim RowOffset As Integer = y * Stride
-                For x As Integer = 0 To Width - 1
-                    Dim px As Integer = RowOffset + (x * 4)
-                    Dim AlphaWeight As Double = ImageBytes1(px + 3) / 255.0
-                    For Channel As Integer = 0 To 2
-                        Dim PixDiff As Double = (CDbl(ImageBytes1(px + Channel)) - CDbl(ImageBytes2(px + Channel))) * AlphaWeight
-                        LocalErrorSums(Channel) += (PixDiff * PixDiff)
-                    Next
-                    Dim AlphaDiff As Double = CDbl(ImageBytes1(px + 3)) - CDbl(ImageBytes2(px + 3))
-                    LocalErrorSums(3) += (AlphaDiff * AlphaDiff)
-                Next
-                Return LocalErrorSums
-            End Function,
-            Sub(LocalErrorSums)
-                SyncLock TempLock
-                    For Channel As Integer = 0 To 3
-                        ErrorSums(Channel) += LocalErrorSums(Channel)
-                    Next
-                End SyncLock
-            End Sub)
-            Dim PixCount As Double = Width * Height
-            Dim Result As New ChannelMetric With {
-                .B = ErrorSums(0) / PixCount,
-                .G = ErrorSums(1) / PixCount,
-                .R = ErrorSums(2) / PixCount,
-                .A = ErrorSums(3) / PixCount}
-            Result.Average = (Result.R + Result.G + Result.B) / 3.0
-            Me.MSE = Result
-            Me.PSNR = New ChannelMetric With {
-                .R = CalculateChannelPSNR(Result.R),
-                .G = CalculateChannelPSNR(Result.G),
-                .B = CalculateChannelPSNR(Result.B),
-                .A = CalculateChannelPSNR(Result.A),
-                .Average = CalculateChannelPSNR(Result.Average)}
-            MSE_Done = True
-            If SSIM_Done Then
-                ImageBytes1 = Nothing
-                ImageBytes2 = Nothing
-            End If
-        End If
+        If MSE_Done Then Return
+        Dim ErrorSums(3) As Double
+        Dim TempLock As New Object()
+        Parallel.For(0, Height,
+           Function() As Double()
+               If BufferA Is Nothing Then BufferA = New Double(3) {}
+               Array.Clear(BufferA, 0, 4)
+               Return BufferA
+           End Function,
+           Function(y, LoopState, LocalErrorSums)
+               Dim RowOffset As Integer = y * Stride
+               For x As Integer = 0 To Width - 1
+                   Dim px As Integer = RowOffset + (x * 4)
+                   Dim AlphaWeight As Double = ImageBytes1(px + 3) / 255.0
+                   For Channel As Integer = 0 To 2
+                       Dim PixDiff As Double = (CDbl(ImageBytes1(px + Channel)) - CDbl(ImageBytes2(px + Channel))) * AlphaWeight
+                       LocalErrorSums(Channel) += (PixDiff * PixDiff)
+                   Next
+                   Dim AlphaDiff As Double = CDbl(ImageBytes1(px + 3)) - CDbl(ImageBytes2(px + 3))
+                   LocalErrorSums(3) += (AlphaDiff * AlphaDiff)
+               Next
+               Return LocalErrorSums
+           End Function,
+           Sub(LocalErrorSums)
+               SyncLock TempLock
+                   For Channel As Integer = 0 To 3
+                       ErrorSums(Channel) += LocalErrorSums(Channel)
+                   Next
+               End SyncLock
+           End Sub)
+        Dim PixCount As Double = Width * Height
+        Dim Result As New ChannelMetric With {
+            .B = ErrorSums(0) / PixCount,
+            .G = ErrorSums(1) / PixCount,
+            .R = ErrorSums(2) / PixCount,
+            .A = ErrorSums(3) / PixCount}
+        Result.Average = (Result.R + Result.G + Result.B) / 3.0
+        Me.MSE = Result
+        Me.PSNR = New ChannelMetric With {
+            .R = CalculateChannelPSNR(Result.R),
+            .G = CalculateChannelPSNR(Result.G),
+            .B = CalculateChannelPSNR(Result.B),
+            .A = CalculateChannelPSNR(Result.A),
+            .Average = CalculateChannelPSNR(Result.Average)}
+        MSE_Done = True
+        Cleanup()
     End Sub
 
     Private Function CalculateChannelPSNR(ValMSE As Double) As Double
@@ -133,12 +135,12 @@
     End Function
 
     Public Sub CalcSSIM()
-        If Not SSIM_Done Then
-            Dim ErrorBlockSums(3) As Double
-            Dim TempLock As New Object()
-            Dim HeightBlocks As Integer = Height \ 8
-            Dim WidthBlocks As Integer = Width \ 8
-            Parallel.For(0, HeightBlocks,
+        If SSIM_Done Then Return
+        Dim ErrorBlockSums(3) As Double
+        Dim TempLock As New Object()
+        Dim HeightBlocks As Integer = Height \ 8
+        Dim WidthBlocks As Integer = Width \ 8
+        Parallel.For(0, HeightBlocks,
             Function() As Double()
                 If BufferA Is Nothing Then BufferA = New Double(3) {}
                 Array.Clear(BufferA, 0, 4)
@@ -161,20 +163,16 @@
                     Next
                 End SyncLock
             End Sub)
-            Dim TotalBlocks As Double = HeightBlocks * WidthBlocks
-            Dim Result As New ChannelMetric With {
-                .B = ErrorBlockSums(0) / TotalBlocks,
-                .G = ErrorBlockSums(1) / TotalBlocks,
-                .R = ErrorBlockSums(2) / TotalBlocks,
-                .A = ErrorBlockSums(3) / TotalBlocks}
-            Result.Average = (Result.R + Result.G + Result.B) / 3.0
-            Me.SSIM = Result
-            SSIM_Done = True
-            If MSE_Done Then
-                ImageBytes1 = Nothing
-                ImageBytes2 = Nothing
-            End If
-        End If
+        Dim TotalBlocks As Double = HeightBlocks * WidthBlocks
+        Dim Result As New ChannelMetric With {
+            .B = ErrorBlockSums(0) / TotalBlocks,
+            .G = ErrorBlockSums(1) / TotalBlocks,
+            .R = ErrorBlockSums(2) / TotalBlocks,
+            .A = ErrorBlockSums(3) / TotalBlocks}
+        Result.Average = (Result.R + Result.G + Result.B) / 3.0
+        Me.SSIM = Result
+        SSIM_Done = True
+        Cleanup()
     End Sub
 
     Private Function CalculateBlockSSIM(xStart As Integer, yStart As Integer, Channel As Integer) As Double
@@ -225,6 +223,60 @@
         Sigma1_2 /= (n - 1)
         Return ((2 * Mu1 * Mu2 + C1) * (2 * Sigma1_2 + C2)) / ((Mu1 * Mu1 + Mu2 * Mu2 + C1) * (Sigma1_1 + Sigma2_2 + C2))
     End Function
+
+    Public Sub CalcMAE_MCS()
+        If MAE_Done Then Return
+        Dim TotalMAE As Double = 0
+        Dim TotalMCS As Double = 0
+        Dim TempLock As New Object()
+        Parallel.For(0, Height,
+            Function() As Double()
+                Return New Double(1) {}
+            End Function,
+            Function(y, LoopState, LocalSums)
+                Dim RowOffset As Integer = y * Stride
+                For x As Integer = 0 To Width - 1
+                    Dim px As Integer = RowOffset + (x * 4)
+                    Dim v1x As Double = (ImageBytes1(px + 2) / 127.5) - 1.0
+                    Dim v1y As Double = (ImageBytes1(px + 1) / 127.5) - 1.0
+                    Dim v2x As Double = (ImageBytes2(px + 2) / 127.5) - 1.0
+                    Dim v2y As Double = (ImageBytes2(px + 1) / 127.5) - 1.0
+                    Dim dotXY1 As Double = (v1x * v1x) + (v1y * v1y)
+                    If dotXY1 > 1.0 Then dotXY1 = 1.0
+                    Dim dotXY2 As Double = (v2x * v2x) + (v2y * v2y)
+                    If dotXY2 > 1.0 Then dotXY2 = 1.0
+                    Dim v1z As Double = Math.Sqrt(1.0 - dotXY1)
+                    Dim v2z As Double = Math.Sqrt(1.0 - dotXY2)
+                    Dim dotProduct As Double = (v1x * v2x) + (v1y * v2y) + (v1z * v2z)
+                    If dotProduct > 1.0 Then dotProduct = 1.0
+                    If dotProduct < -1.0 Then dotProduct = -1.0
+                    Dim angleRadians As Double = Math.Acos(dotProduct)
+                    Dim angleDegrees As Double = angleRadians * (180.0 / Math.PI)
+                    LocalSums(0) += angleDegrees
+                    LocalSums(1) += dotProduct
+                Next
+                Return LocalSums
+            End Function,
+            Sub(LocalSums)
+                SyncLock TempLock
+                    TotalMAE += LocalSums(0)
+                    TotalMCS += LocalSums(1)
+                End SyncLock
+            End Sub)
+        Dim TotalPixels As Double = Width * Height
+        Me.MAE = TotalMAE / TotalPixels
+        Dim RawMCS As Double = TotalMCS / TotalPixels
+        Me.MCS = (RawMCS + 1.0) / 2.0
+        MAE_Done = True
+        Cleanup()
+    End Sub
+
+    Private Sub Cleanup()
+        If MSE_Done And SSIM_Done AndAlso MAE_Done Then
+            ImageBytes1 = Nothing
+            ImageBytes2 = Nothing
+        End If
+    End Sub
 
     Protected Overridable Sub Dispose(Disposing As Boolean)
         If Not Disposed Then

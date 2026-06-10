@@ -181,7 +181,7 @@ Public Class DDS_Decoder
                         BytesToRead = BaseBytes * 16
                         OutputPixelFormat = PixelFormats.Pbgra32
                     Case "DXT5"
-                        CompressionMode = 3
+                        CompressionMode = If(IsNormalMap, 30, 3)
                         BytesToRead = BaseBytes * 16
                     Case "ATI1", "BC4U"
                         CompressionMode = 4
